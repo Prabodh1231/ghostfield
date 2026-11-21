@@ -1,6 +1,6 @@
 # CPU solver, tests 6 and 7
 
-Branch `feat/cpu-solver`. PR: PR_URL_HERE
+Branch `feat/cpu-solver`. PR: https://github.com/Prabodh1231/ghostfield/pull/1
 
 Node v24.21.0, pnpm 12.21.0, Vitest 2.1.9, Windows. Single fork, no watch.
 
@@ -137,5 +137,5 @@ Run time: about 94 s (default), 60 s (200x168), 71 s (moved source).
 - Test 7 checks modes below 80 Hz only (7 modes in the default room). Higher modes closer than 4 % apart share a search window, so they were left out.
 - Peak search windows are +-2 % around the formula, so a mode absent from the signal would fail, but a wrong peak inside the window would be read as that mode.
 - The DFT is a direct evaluation at chosen frequencies (equal to unlimited zero padding), not an FFT.
-- No CI result on Linux yet when this was written, see PR.
+- CI: `gh pr checks 1` read live: physics-tests pass, 1m15s (https://github.com/Prabodh1231/ghostfield/actions/runs/44898207570).
 - Only 6 s records were tried; 8 s was not.
