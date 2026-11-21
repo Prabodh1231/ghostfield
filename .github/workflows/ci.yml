@@ -28,3 +28,11 @@ jobs:
         run: pnpm --filter ghostfield-core exec vitest run tests/test5-cpml-reflection.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
       - name: GPU parity (skips itself when there is no WebGPU adapter)
         run: pnpm --filter ghostfield-core exec vitest run tests/gpu-parity.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
+      - name: GPU job vs CPU job (skips itself when there is no WebGPU adapter)
+        run: pnpm --filter ghostfield-core exec vitest run tests/gpu-job.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
+      - name: Wi-Fi app, material mapping test
+        run: pnpm --filter wifi-deadzone exec vitest run tests/materials.test.ts --pool=forks --poolOptions.forks.singleFork
+      - name: Wi-Fi app, wall shadow check (CPU solver, prints the numbers)
+        run: pnpm --filter wifi-deadzone exec vitest run tests/shadow.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
+      - name: Wi-Fi app, static build
+        run: pnpm --filter wifi-deadzone build

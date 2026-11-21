@@ -5,6 +5,8 @@ import { Q_KERNEL, U_KERNEL, WORKGROUP } from "./shaders";
 
 export const MAX_SOURCES = 8;
 export const MAX_PROBES = 8;
+/** Steps recorded into one command buffer and sent in one queue.submit. Each step has its own params buffer. */
+export const STEPS_PER_SUBMIT = 16;
 
 export interface GpuSolverOptions {
   /** CPML built for the same CoefficientSet. Its profiles are copied; psi is kept in strips here. */
@@ -42,7 +44,7 @@ export class GpuSolver {
   private readonly invDx: number;
   private readonly T: number;
   private readonly cpml: boolean;
-  private readonly params: GPUBuffer;
+  private readonly params: GPUBuffer[] = [];
   private readonly bufU: GPUBuffer;
   private readonly bufQx: GPUBuffer;
   private readonly bufQy: GPUBuffer;
@@ -70,7 +72,7 @@ export class GpuSolver {
     const mk = (bytes: number) => dev.createBuffer({ size: Math.max(16, Math.ceil(bytes / 4) * 4), usage: STORAGE });
     const upload = (b: GPUBuffer, data: ArrayBufferView) => dev.queue.writeBuffer(b, 0, data as unknown as GPUAllowSharedBufferSource);
 
-    this.params = dev.createBuffer({ size: 288, usage: USAGE.UNIFORM | USAGE.COPY_DST });
+    for (let k = 0; k < STEPS_PER_SUBMIT; k++) this.params.push(dev.createBuffer({ size: 288, usage: USAGE.UNIFORM | USAGE.COPY_DST }));
     this.bufU = mk(4 * nx * ny);
     this.bufQx = mk(4 * (nx + 1) * ny);
     this.bufQy = mk(4 * nx * (ny + 1));
@@ -136,48 +138,54 @@ export class GpuSolver {
     const { dev, nx, ny } = this;
     const nProbe = this.probes.length;
     const probeOut = dev.createBuffer({ size: Math.max(16, 4 * steps * Math.max(nProbe, 1)), usage: STORAGE });
-    const bgQ = dev.createBindGroup({
-      layout: this.pipeQ.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: this.params } },
-        { binding: 1, resource: { buffer: this.bufU } },
-        { binding: 2, resource: { buffer: this.bufQx } },
-        { binding: 3, resource: { buffer: this.bufQy } },
-        { binding: 4, resource: { buffer: this.bufCoef } },
-        { binding: 5, resource: { buffer: this.bufProf } },
-        { binding: 6, resource: { buffer: this.bufPsiQ } },
-        { binding: 7, resource: { buffer: this.bufSolid } },
-      ],
-    });
-    const bgU = dev.createBindGroup({
-      layout: this.pipeU.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: this.params } },
-        { binding: 1, resource: { buffer: this.bufU } },
-        { binding: 2, resource: { buffer: this.bufQx } },
-        { binding: 3, resource: { buffer: this.bufQy } },
-        { binding: 4, resource: { buffer: this.bufCoef } },
-        { binding: 5, resource: { buffer: this.bufProf } },
-        { binding: 6, resource: { buffer: this.bufPsiU } },
-        { binding: 7, resource: { buffer: probeOut } },
-      ],
-    });
+    // One bind group pair per params buffer, so a batch of steps can be recorded before one submit.
+    const bgs = this.params.map((params) => ({
+      q: dev.createBindGroup({
+        layout: this.pipeQ.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: params } },
+          { binding: 1, resource: { buffer: this.bufU } },
+          { binding: 2, resource: { buffer: this.bufQx } },
+          { binding: 3, resource: { buffer: this.bufQy } },
+          { binding: 4, resource: { buffer: this.bufCoef } },
+          { binding: 5, resource: { buffer: this.bufProf } },
+          { binding: 6, resource: { buffer: this.bufPsiQ } },
+          { binding: 7, resource: { buffer: this.bufSolid } },
+        ],
+      }),
+      u: dev.createBindGroup({
+        layout: this.pipeU.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: params } },
+          { binding: 1, resource: { buffer: this.bufU } },
+          { binding: 2, resource: { buffer: this.bufQx } },
+          { binding: 3, resource: { buffer: this.bufQy } },
+          { binding: 4, resource: { buffer: this.bufCoef } },
+          { binding: 5, resource: { buffer: this.bufProf } },
+          { binding: 6, resource: { buffer: this.bufPsiU } },
+          { binding: 7, resource: { buffer: probeOut } },
+        ],
+      }),
+    }));
     const gx = Math.ceil((nx + 1) / WORKGROUP);
     const gy = Math.ceil((ny + 1) / WORKGROUP);
-    for (let n = 0; n < steps; n++) {
-      this.step++;
-      this.writeParams(this.step, n * nProbe);
+    for (let n0 = 0; n0 < steps; n0 += STEPS_PER_SUBMIT) {
       const enc = dev.createCommandEncoder();
-      const pq = enc.beginComputePass();
-      pq.setPipeline(this.pipeQ);
-      pq.setBindGroup(0, bgQ);
-      pq.dispatchWorkgroups(gx, gy);
-      pq.end();
-      const pu = enc.beginComputePass();
-      pu.setPipeline(this.pipeU);
-      pu.setBindGroup(0, bgU);
-      pu.dispatchWorkgroups(gx, gy);
-      pu.end();
+      for (let n = n0; n < Math.min(steps, n0 + STEPS_PER_SUBMIT); n++) {
+        const k = n - n0;
+        this.step++;
+        this.writeParams(this.step, n * nProbe, this.params[k]!);
+        const pq = enc.beginComputePass();
+        pq.setPipeline(this.pipeQ);
+        pq.setBindGroup(0, bgs[k]!.q);
+        pq.dispatchWorkgroups(gx, gy);
+        pq.end();
+        const pu = enc.beginComputePass();
+        pu.setPipeline(this.pipeU);
+        pu.setBindGroup(0, bgs[k]!.u);
+        pu.dispatchWorkgroups(gx, gy);
+        pu.end();
+      }
       dev.queue.submit([enc.finish()]);
     }
     if (nProbe > 0) {
@@ -195,10 +203,10 @@ export class GpuSolver {
   }
 
   destroy(): void {
-    for (const b of [this.params, this.bufU, this.bufQx, this.bufQy, this.bufCoef, this.bufProf, this.bufPsiQ, this.bufPsiU, this.bufSolid]) b.destroy();
+    for (const b of [...this.params, this.bufU, this.bufQx, this.bufQy, this.bufCoef, this.bufProf, this.bufPsiQ, this.bufPsiU, this.bufSolid]) b.destroy();
   }
 
-  private writeParams(step: number, probeBase: number): void {
+  private writeParams(step: number, probeBase: number, target: GPUBuffer): void {
     const dv = new DataView(this.paramData);
     const t = step * this.dt;
     dv.setUint32(0, this.nx, true);
@@ -218,7 +226,7 @@ export class GpuSolver {
       dv.setUint32(160 + 16 * k, p.ix, true);
       dv.setUint32(164 + 16 * k, p.iy, true);
     });
-    this.dev.queue.writeBuffer(this.params, 0, this.paramData);
+    this.dev.queue.writeBuffer(target, 0, this.paramData);
   }
 
   private async read(src: GPUBuffer, bytes: number): Promise<Float32Array> {
