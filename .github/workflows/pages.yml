@@ -24,11 +24,14 @@ jobs:
           node-version: 24
       - run: npm install -g pnpm@12.21.0
       - run: pnpm install --frozen-lockfile
-      # To add a second app later: build it too, then copy each dist into one
-      # folder (e.g. site/ and site/<app>/) and upload that folder instead.
       - run: pnpm --filter wifi-deadzone build
+      - run: pnpm --filter bass-ghost-finder build
+      - run: |
+          mkdir -p site/bass
+          cp -r apps/wifi-deadzone/dist/. site/
+          cp -r apps/bass-ghost-finder/dist/. site/bass/
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: apps/wifi-deadzone/dist
+          path: site
       - id: deployment
         uses: actions/deploy-pages@v4
