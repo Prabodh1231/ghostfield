@@ -36,3 +36,11 @@ jobs:
         run: pnpm --filter wifi-deadzone exec vitest run tests/shadow.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
       - name: Wi-Fi app, static build
         run: pnpm --filter wifi-deadzone build
+      - name: Response job (CPU, and GPU vs CPU when WebGPU exists)
+        run: pnpm --filter ghostfield-core exec vitest run tests/response-job.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
+      - name: Bass app, scene and map tests
+        run: pnpm --filter bass-ghost-finder exec vitest run tests/scene.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
+      - name: Bass app, headless trap check (CPU solver, prints the numbers, about 3 min)
+        run: pnpm --filter bass-ghost-finder exec vitest run tests/trap.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=600000
+      - name: Bass app, static build
+        run: pnpm --filter bass-ghost-finder build
