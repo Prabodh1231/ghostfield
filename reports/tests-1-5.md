@@ -1,6 +1,6 @@
-﻿# Tests 1-5, CPML boundary (round 2)
+# Tests 1-5, CPML boundary (round 2)
 
-Branch `feat/physics-tests-1-5`. PR: PR_URL_HERE. Host: Windows, Node/Vitest single fork, f32 fields.
+Branch `feat/physics-tests-1-5`. PR: https://github.com/Prabodh1231/ghostfield/pull/2. Host: Windows, Node/Vitest single fork, f32 fields.
 Every number below is printed by the tests. Nothing is quoted from research docs.
 
 ## What was built
@@ -193,4 +193,4 @@ max |error| = 0.002 %
 - CPML psi arrays are full-grid on the CPU (comment in the code). The GPU port should use strips.
 - Alpha and kappa effects at long run times (more than 450 steps) are not tested; late-time CPML stability is unchecked.
 - Test 3 does not cover L or gammaQ jumps (limit documented above).
-- CI result is added after the run: see the PR.
+- CI: `gh pr checks 2` printed `physics-tests pass 1m22s` (run 44900241143).
