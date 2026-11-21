@@ -11,7 +11,7 @@ powers/ghostfield-fdtd/
 ```
 No `mcp.json` (no tools needed).
 
-## Facts checked against code (origin/main at ecbd5fc)
+## Facts checked against code (origin/main at ecbd5fc; bass facts rechecked against f369c3c)
 CFL_LIMIT 0.7071, DEFAULT_COURANT 0.693, cMax = 1/sqrt(min C * min L), stride-4 coef `[Au,Bu,Aq,Bq]`, ETD with expm1 and 1e-8 cutoff, `FieldJob` / `runCpuJob` / `runGpuJob` signatures, `makePlan` 3-snapshot rule, CPML defaults, `detectBackend` and `CPU_GRID_SCALE` 0.5, GPU limits (8 sources, 8 probes, 16 steps per submit), `referencePower` / `toDb` in `apps/wifi-deadzone/src/scene.ts`.
 
 ## Install in Kiro
@@ -23,4 +23,4 @@ Powers panel, Add Custom Power, Import from a folder, pick `powers/ghostfield-fd
 ## Not tested
 - Never loaded in Kiro (no IDE run). The `$schema` URL and skill front matter follow the docs as quoted in day1-checks, not a live validator.
 - Code samples were not compiled or run.
-- Bass claims (horizontal modes, pressure mapping) come from the project design notes. The bass app is in PR #6 and was not read.
+- Bass claims (horizontal modes, pressure mapping) come from the project design notes. The bass app (`apps/bass-ghost-finder`, merged as f369c3c) was read for the pressure mapping, the response-job names and the horizontal-modes note.

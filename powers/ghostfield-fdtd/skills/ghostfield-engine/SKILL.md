@@ -40,7 +40,7 @@ import { makePlan } from "@core/runtime/sineSource";
 import { runCpuJob, type FieldJob } from "@core/runtime/cpuJob";
 import { runGpuJob } from "@core/gpu/gpuJob";
 
-const dt = (DEFAULT_COURANT * dx) / cMax;
+// material = { C, L, gammaU, gammaQ }; cMax = 1/sqrt(min C * min L) over the grid\nconst dt = (DEFAULT_COURANT * dx) / cMax;
 const cs = buildCoefficients(n, n, dx, dt, (ix, iy) => material);
 const plan = makePlan(freq, dt, settleSteps, averagePeriods, sampleEvery);
 const job: FieldJob = {
@@ -56,6 +56,9 @@ const gpu = await runGpuJob(device, job, onProgress, cancelled); // async
 ```
 - `sampleEvery` must give at least 3 snapshots per period (`makePlan` throws otherwise). The Wi-Fi app uses 6.
 - Reference app: `apps/wifi-deadzone/src/scene.ts` (`buildJob`).
+
+## Response job (broadband, used by the bass app)
+Source is a Ricker pulse, output is a spectrum. CPU: unCpuResponse(job, onProgress, cancelled) in untime/responseJob.ts, with ickerSource(ix, iy, f0) and esponseSpectrum(result, freqs). GPU: unGpuResponse(...) in gpu/responseGpuJob.ts. Reference app: pps/bass-ghost-finder (sim.ts).
 
 ## Low level CPU use
 `new CpuSolver(cs, boundary)`, then `addSource`, `addProbe(ix, iy)`, `run(n)` or `advance()`.

@@ -20,5 +20,5 @@ The Wi-Fi app (`apps/wifi-deadzone`) shows **relative signal in dB**, from a **2
 - Time step uses free-space speed (the fastest), with Courant 0.693. See the `ghostfield-engine` skill.
 
 ## Bass (not Wi-Fi)
-The bass app (not in main when this was written) uses the same engine with pressure. Its modes are **horizontal** room modes. Test 7 checks the solver against the room-mode formula for a rigid rectangular room.
+The bass app (`apps/bass-ghost-finder`) uses the same engine with pressure: `scene.ts` sets `C = 1/(RHO0*C0^2)` and `L = RHO0` (RHO0 1.2, C0 343). It runs the response job (`runGpuResponse`, or `runCpuResponse` on CPU). Its modes are **horizontal** room modes (2D plan view, no floor-to-ceiling modes). Test 7 checks the solver against the room-mode formula for a rigid rectangular room.
 
