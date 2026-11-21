@@ -1,6 +1,6 @@
 # Wi-Fi dead-zone app (`apps/wifi-deadzone`)
 
-Branch `feat/wifi-app`. PR: PR_URL_HERE
+Branch `feat/wifi-app`. PR: https://github.com/Prabodh1231/ghostfield/pull/4
 
 ## What was built
 
