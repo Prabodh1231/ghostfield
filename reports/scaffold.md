@@ -40,7 +40,7 @@ Moved from C:\Users\prabo\.kiro\crew\workspace\ghostfield to C:\Users\prabo\Proj
 
 ## GitHub
 Commands: `gh auth status` (logged in as Prabodh1231), then `gh repo create ghostfield --public --source . --push --description "2D FDTD wave engine: Wi-Fi dead zones and room bass modes in the browser"`.
-Repo URL: REPOURL
+Repo URL: https://github.com/Prabodh1231/ghostfield
 
 ## Skipped
 - No .kiro/hooks, no solver code, no src/coefficients.ts, no GitHub remote or push.
