@@ -26,3 +26,5 @@ jobs:
         run: pnpm --filter ghostfield-core exec vitest run tests/test4-spreading.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
       - name: Test 5 (CPML reflection)
         run: pnpm --filter ghostfield-core exec vitest run tests/test5-cpml-reflection.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
+      - name: GPU parity (skips itself when there is no WebGPU adapter)
+        run: pnpm --filter ghostfield-core exec vitest run tests/gpu-parity.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000

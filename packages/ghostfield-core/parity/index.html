@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>GhostField GPU parity</title></head>
+<body style="font-family:monospace;padding:1em">
+<h1 id="verdict">running...</h1>
+<pre id="out"></pre>
+<script type="module">
+  import { runParity, PARITY_TOLERANCE } from "../src/gpu/parity.ts";
+  import { detectBackend } from "../src/runtime/detectBackend.ts";
+  const out = document.getElementById("out");
+  const verdict = document.getElementById("verdict");
+  try {
+    const b = await detectBackend();
+    if (b.kind !== "webgpu") throw new Error("no usable WebGPU: " + b.reason);
+    out.textContent += "adapter: " + JSON.stringify({ vendor: b.adapter.info.vendor, architecture: b.adapter.info.architecture, description: b.adapter.info.description }) + "\n";
+    const res = await runParity(b.device);
+    let ok = true;
+    for (const r of res) {
+      const pass = r.peak > 1e-3 && r.rel < PARITY_TOLERANCE;
+      ok = ok && pass;
+      out.textContent += `${pass ? "PASS" : "FAIL"}  ${r.name}\n      max abs diff = ${r.maxAbsDiff.toExponential(3)}  peak = ${r.peak.toExponential(3)}  rel = ${r.rel.toExponential(3)}  (limit ${PARITY_TOLERANCE})\n`;
+    }
+    verdict.textContent = ok ? "PASS" : "FAIL";
+    verdict.style.color = ok ? "green" : "red";
+  } catch (e) {
+    verdict.textContent = "FAIL";
+    verdict.style.color = "red";
+    out.textContent += String((e && e.stack) || e);
+  }
+</script>
+</body>
+</html>
