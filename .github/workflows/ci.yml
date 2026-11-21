@@ -16,3 +16,13 @@ jobs:
         run: pnpm --filter ghostfield-core exec vitest run tests/test6-cfl-etd.test.ts --pool=forks --poolOptions.forks.singleFork
       - name: Test 7 (room modes)
         run: pnpm --filter ghostfield-core exec vitest run tests/test7-room-modes.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
+      - name: Test 1 (energy)
+        run: pnpm --filter ghostfield-core exec vitest run tests/test1-energy.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
+      - name: Test 2 (reciprocity)
+        run: pnpm --filter ghostfield-core exec vitest run tests/test2-reciprocity.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
+      - name: Test 3 (mirror symmetry)
+        run: pnpm --filter ghostfield-core exec vitest run tests/test3-mirror.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
+      - name: Test 4 (2D spreading)
+        run: pnpm --filter ghostfield-core exec vitest run tests/test4-spreading.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
+      - name: Test 5 (CPML reflection)
+        run: pnpm --filter ghostfield-core exec vitest run tests/test5-cpml-reflection.test.ts --pool=forks --poolOptions.forks.singleFork --testTimeout=300000
