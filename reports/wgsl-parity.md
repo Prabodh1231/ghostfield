@@ -1,6 +1,6 @@
 # WGSL shaders + WebGPU runner: parity with the CPU solver
 
-Branch `feat/wgsl`. PR: PR_URL_PLACEHOLDER
+Branch `feat/wgsl`. PR: https://github.com/Prabodh1231/ghostfield/pull/3
 
 ## What was built
 
@@ -76,3 +76,7 @@ If it says "no usable WebGPU", open `chrome://gpu` and check the WebGPU line. Th
 - Max 8 sources and 8 probes. One submit per step (no batching), fine for tests, slow for the app: batch before the app ships.
 - Wall-then-CPML order (the other `composeBoundaries` order) is not supported on the GPU.
 - Existing tests 1-7 were not rerun locally; only `tsc --noEmit` (clean) and the parity test.
+
+## CI result
+
+CI (physics-tests) passed on PR #3. The GPU parity test was SKIPPED there (no adapter on the runner), as designed.
