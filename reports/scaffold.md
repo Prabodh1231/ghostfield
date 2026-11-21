@@ -2,7 +2,8 @@
 
 ## Versions
 - Node: v24.21.0
-- pnpm: 12.21.0 (was not installed; installed with `npm i -g pnpm`)
+- pnpm: 12.21.0 (was not installed; installed with 
+pm i -g pnpm`)
 - npm: 10.8.1, git: 2.43.0.windows.1
 
 ## Commands run (in order)
@@ -33,6 +34,13 @@ git add <specific files>; git commit
 Root: package.json, pnpm-workspace.yaml, tsconfig.base.json, LICENSE (MIT, 2026 GhostField contributors), .gitignore (does not ignore .kiro/).
 Core: packages/ghostfield-core/{package.json,tsconfig.json,src/cpu,src/gpu,src/runtime,tests/smoke.test.ts}.
 Kiro: .kiro/steering/{product,tech,structure}.md (review fixes 2, 6, 7, 12 applied), .kiro/specs/engine/requirements.md.
+
+## Relocation
+Moved from C:\Users\prabo\.kiro\crew\workspace\ghostfield to C:\Users\prabo\Projects\ghostfield (robocopy, 72/72 files matched, old folder removed, `pnpm install` and the smoke test re-run there: 1 passed, exit 0).
+
+## GitHub
+Commands: `gh auth status` (logged in as Prabodh1231), then `gh repo create ghostfield --public --source . --push --description "2D FDTD wave engine: Wi-Fi dead zones and room bass modes in the browser"`.
+Repo URL: REPOURL
 
 ## Skipped
 - No .kiro/hooks, no solver code, no src/coefficients.ts, no GitHub remote or push.
