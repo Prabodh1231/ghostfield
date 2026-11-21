@@ -3,7 +3,7 @@ import { DEFAULT_COURANT, buildCoefficients, dtFromCourant, type Material } from
 import { CpuSolver } from "../src/cpu";
 
 /**
- * Test 7: rectangular room modes, f = (c/2) sqrt((m/Lx)^2 + (n/Ly)^2), within 1%.
+ * Test 7: rectangular room modes, f = (c/2) sqrt((m/Lx)^2 + (n/Ly)^2), within 0.1%.
  *
  * Wall position: u lives at cell centres, qx/qy at cell faces. The outer faces
  * are never updated (q = 0 there, rigid wall). So the wall sits exactly on the
@@ -27,9 +27,10 @@ const SECONDS = Number(env.GF_SECONDS ?? 6);
 const FMAX = Number(env.GF_FMAX ?? 80);
 const SRC = pair(env.GF_SRC, [Math.round(0.2 * NX), Math.round(0.27 * NY)]);
 const PROBE = pair(env.GF_PROBE, [Math.round(0.8 * NX), Math.round(0.74 * NY)]);
-const TOL_PCT = 1;
+// Tightened from 1 % to 0.1 % (measured max error 0.002 %): a one-cell wall error is 0.39-0.5 % and now fails.
+const TOL_PCT = 0.1;
 
-const LX = NX * DX;
+const LX = NX * DX; // break check: (NX + 1) * DX
 const LY = NY * DX;
 const modeHz = (m: number, n: number) => (C0 / 2) * Math.sqrt((m / LX) ** 2 + (n / LY) ** 2);
 
@@ -77,7 +78,7 @@ function findPeak(x: Float64Array, fs: number, f0: number): { f: number; mag: nu
 
 describe("test 7: rectangular room modes", () => {
   it(
-    "lowest modes match (c/2)sqrt((m/Lx)^2+(n/Ly)^2) within 1%",
+    "lowest modes match (c/2)sqrt((m/Lx)^2+(n/Ly)^2) within 0.1%",
     () => {
       const air: Material = { C: 1 / (RHO * C0 * C0), L: RHO, gammaU: 0, gammaQ: 0 };
       const dt = dtFromCourant(DEFAULT_COURANT, DX, C0);
