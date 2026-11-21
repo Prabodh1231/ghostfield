@@ -1,0 +1,8 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "ghostfield-fdtd",
+  "version": "1.0.0",
+  "description": "How to use the GhostField 2D FDTD wave engine (CPU and WebGPU) for Wi-Fi dead-zone and room-bass simulation",
+  "author": { "name": "GhostField contributors" },
+  "keywords": ["ghostfield", "fdtd", "wifi", "room modes", "wave simulation", "webgpu", "cfl"]
+}
