@@ -17,3 +17,9 @@ h1 { font-size: 20px; margin: 4px 0; }
 progress { width: min(100%, 768px); height: 10px; display: block; margin-top: 4px; }
 .err { color: #ff8a80; }
 .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.back { font-size: 13px; color: #8fb0ff; text-decoration: none; }
+.lead { font-size: 15px; margin: 6px 0 10px; }
+.steps { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0 0 12px; }
+.steps li { flex: 1 1 220px; background: #1d222b; border: 1px solid #3a414d; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+.steps b { display: inline-block; background: #3552a8; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; margin-right: 6px; }
+.small { font-size: 11.5px; color: #98a0ac; margin: 6px 0; }
