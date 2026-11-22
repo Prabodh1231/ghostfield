@@ -66,7 +66,7 @@ export default function App() {
   const [response, setResponse] = useState<Response | null>(null);
   const [mapVersion, setMapVersion] = useState(0);
   const [stale, setStale] = useState(false);
-  const [status, setStatus] = useState<Status>({ text: "Detecting backend...", fraction: null });
+  const [status, setStatus] = useState<Status>({ text: "Starting up…", fraction: null });
   const [mode, setMode] = useState<PlayMode>("laptop");
   const [volume, setVolume] = useState(5);
   const [playing, setPlaying] = useState(false);
@@ -388,7 +388,7 @@ export default function App() {
       <p className="lead">This simulates sound waves bouncing around a room, right in your browser. Low notes pile up in some spots (boom) and cancel in others (quiet).</p>
       <ol className="steps">
         <li><b>1</b> Drag SUB (your speaker) and SEAT (where you listen).</li>
-        <li><b>2</b> Click an orange dot on the chart: that note booms in your room.</li>
+        <li><b>2</b> Click an orange dot on the chart (it appears after a few seconds): that note booms in your room.</li>
         <li><b>3</b> Read the map: red = boom, blue = quiet. Add foam to tame it.</li>
       </ol>
       <p className="small">Honest note: this is a flat top-down view, so it shows side-to-side booms only, not floor-to-ceiling ones. It is a model, not a measurement. Thin foam does little for deep bass; that is physics, not a bug.</p>
@@ -429,28 +429,37 @@ export default function App() {
       <div className="cols">
         <div>
           <div className={`stage${stale ? " stale" : ""}`}>
+            {!mapRef.current && (
+              <div className="wait">
+                <div>Working out the room… a few seconds</div>
+                <progress value={status.fraction ?? undefined} max={1} />
+              </div>
+            )}
             <canvas ref={planRef} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} />
           </div>
           <div className="legend">
             <div className="grad" style={{ background: "linear-gradient(90deg, rgb(0,0,77), rgb(0,150,255), rgb(0,255,60), rgb(255,200,0), rgb(255,0,0))" }} />
             <div className="ticks">
-              <span>Quiet (null)</span>
+              <span>Quiet</span>
               <span>Medium</span>
               <span>Boom (loud)</span>
             </div>
-            Map of one note: {freq.toFixed(1)} Hz. Drag SUB or SEAT to move them. Orange = foam panel, purple = corner block. Dark grey = wall.
-            <div className="small">Blue is 40 dB (10,000 times less power) below red.</div>
+            Map of one note: {freq.toFixed(1)} Hz (Hz is pitch: a small number is a deep note). Drag SUB or SEAT to move them. Orange = foam panel, purple = corner block. Dark grey = wall.
+            <div className="small">Blue has about 10,000 times less sound power than red.</div>
           </div>
         </div>
         <div>
-          <canvas ref={chartRef} className="chart" onClick={onChartClick} />
+          <div className="chartbox">
+            <canvas ref={chartRef} className="chart" onClick={onChartClick} />
+            {!response && <div className="wait">Measuring the room… orange dots appear here in a few seconds</div>}
+          </div>
           <div className="legend">What you hear at SEAT for each note (low to high pitch), compared with the loudest. Dips are notes that vanish, orange dots are notes that boom. Click a dot to see where it booms. Yellow line = the note on the map.</div>
           <div className="bar">
             <label>
               Frequency{" "}
               <input type="range" min={F_MIN} max={F_MAX} step={0.5} value={freq} onChange={(e) => chooseFreq(+e.target.value)} /> {freq.toFixed(1)} Hz
             </label>
-            <span>{relDb >= 0 ? "+" : ""}{relDb.toFixed(1)} dB louder than a typical spot in the room</span>
+            <span>{!response ? "" : relDb >= 3 ? "At your seat this note is louder than most of the room." : relDb <= -3 ? "At your seat this note is quieter than most of the room." : "At your seat this note is about average."}</span>
           </div>
           <div className="bar">
             <label>
@@ -486,8 +495,8 @@ export default function App() {
           Running on:{" "}
           {backend
             ? backend.kind === "webgpu"
-              ? `your graphics chip (WebGPU), grid ${room ? `${room.nx}x${room.ny}` : ""}`
-              : `your processor, grid ${room ? `${room.nx}x${room.ny}` : ""}`
+              ? "your graphics chip"
+              : "your processor"
             : "starting up..."}
         </div>
       </div>

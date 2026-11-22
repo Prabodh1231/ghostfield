@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DB_MAX, DB_MIN, legendGradient, paintHeatmap } from "./heatmap";
+import { legendGradient, paintHeatmap } from "./heatmap";
 import { WALL_MATERIALS, wallMaterial, type WallMaterialId } from "./materials";
 import { CELL_M, buildJob, defaultScene, referencePower, toDb, type Scene, type Wall } from "./scene";
 import { pickBackend, startSim, type Backend, type SimHandle } from "./sim";
@@ -31,6 +31,7 @@ export default function App() {
   const [draft, setDraft] = useState<Wall | null>(null);
   const [status, setStatus] = useState<Status>({ text: "Starting up…", fraction: null });
   const [stale, setStale] = useState(false);
+  const [hasMap, setHasMap] = useState(false);
   const [cursorDb, setCursorDb] = useState<string>("");
 
   const heatRef = useRef<HTMLCanvasElement>(null);
@@ -78,6 +79,7 @@ export default function App() {
           dbRef.current = db;
           paintHeatmap(heatRef.current!, db, built.n);
           setStale(false);
+          setHasMap(true);
           setStatus({ text: `Done: ${r.steps} steps in ${((performance.now() - t0) / 1000).toFixed(1)} s`, fraction: null });
         })
         .catch((e) => setStatus({ text: `Simulation failed: ${String(e)}`, fraction: null, error: true }));
@@ -183,7 +185,7 @@ export default function App() {
       const i = Math.floor(p.x / CELL_M);
       const j = Math.floor(p.y / CELL_M);
       const v = i >= 0 && j >= 0 && i < backend.n && j < backend.n ? dbRef.current[j * backend.n + i]! : null;
-      setCursorDb(v === null ? "" : `${v.toFixed(1)} dB`);
+      setCursorDb(v === null ? "" : v > -10 ? "strong" : v > -25 ? "medium" : v > -45 ? "weak" : "dead");
     }
   };
 
@@ -246,6 +248,12 @@ export default function App() {
       </p>
       <div className={`stage${stale ? " stale" : ""}`}>
         <canvas ref={heatRef} className="heat" />
+        {!hasMap && (
+          <div className="wait">
+            <div>Working out the signal… a few seconds</div>
+            <progress value={status.fraction ?? undefined} max={1} />
+          </div>
+        )}
         <canvas
           ref={overlayRef}
           className="overlay"
@@ -259,24 +267,20 @@ export default function App() {
         <strong>Signal strength</strong>
         <div className="grad" style={{ background: legendGradient() }} />
         <div className="ticks">
-          <span>Dead ({DB_MIN} dB)</span>
+          <span>Dead</span>
           <span>Weak</span>
-          <span>Strong ({DB_MAX} dB)</span>
+          <span>Strong</span>
         </div>
-        <div className="note">Compared with the signal right next to the router (0 dB). Every -10 dB is ten times weaker. {cursorDb && `Under the cursor: ${cursorDb}`}</div>
+        <div className="note">Compared with the signal right next to the router. {cursorDb && `Under the cursor: ${cursorDb}`}</div>
         <div className="small">
-          Honest note: this is a flat 2D picture of a 2.4 GHz router, so numbers are relative, not real dBm. Real rooms are 3D, and in 2D the signal fades more slowly with distance.
+          Honest note: this is a flat 2D picture of a Wi-Fi router, so the colours show relative strength, not exact signal. Real rooms are 3D, and in 2D the signal fades more slowly with distance.
         </div>
       </div>
       <div className={`status${status.error ? " err" : ""}`}>
         {status.text}
         {status.fraction !== null && <progress value={status.fraction} max={1} />}
       </div>
-      <div className="small">
-        {backend
-          ? `Running on: ${backend.kind === "webgpu" ? "your graphics chip (WebGPU)" : "your processor"}. Grid ${backend.n}x${backend.n}, room ${roomM.toFixed(1)} m wide.`
-          : "Starting up..."}
-      </div>
+      {backend && <div className="small">Room is {roomM.toFixed(1)} m wide.</div>}
     </div>
   );
 }
