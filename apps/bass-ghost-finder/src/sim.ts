@@ -15,7 +15,8 @@ export async function pickBackend(): Promise<Backend> {
   const cpuDx = DX_GPU / CPU_GRID_SCALE;
   // "?backend=cpu" forces the fallback, to try it on a machine that has WebGPU.
   if (new URLSearchParams(location.search).get("backend") === "cpu") return { kind: "cpu", reason: "forced by ?backend=cpu", dx: cpuDx };
-  const b = await detectBackend();
+  // shortcut: a hung requestAdapter/requestDevice (some GPU-less setups) must not leave the page blank; give up after 4 s and use the CPU.
+  const b = await Promise.race([detectBackend(), new Promise<{ kind: "cpu"; reason: string }>((r) => setTimeout(() => r({ kind: "cpu", reason: "WebGPU did not answer" }), 4000))]);
   return b.kind === "webgpu" ? { kind: "webgpu", device: b.device, dx: DX_GPU } : { kind: "cpu", reason: b.reason, dx: cpuDx };
 }
 

@@ -66,7 +66,7 @@ export default function App() {
   const [response, setResponse] = useState<Response | null>(null);
   const [mapVersion, setMapVersion] = useState(0);
   const [stale, setStale] = useState(false);
-  const [status, setStatus] = useState<Status>({ text: "Detecting backend...", fraction: null });
+  const [status, setStatus] = useState<Status>({ text: "Starting up…", fraction: null });
   const [mode, setMode] = useState<PlayMode>("laptop");
   const [volume, setVolume] = useState(5);
   const [playing, setPlaying] = useState(false);
@@ -92,7 +92,7 @@ export default function App() {
     mapSim.current?.cancel();
     try {
       const { room: r, job } = buildFieldJob(sceneRef.current, b.dx, freqRef.current);
-      const sim = startField(b, job, (f) => setStatus({ text: "Drawing the map of booms and nulls...", fraction: f }));
+      const sim = startField(b, job, (f) => setStatus({ text: "Drawing the map of booms and quiet spots...", fraction: f }));
       mapSim.current = sim as SimHandle<unknown>;
       sim.result
         .then((res) => {
@@ -132,8 +132,8 @@ export default function App() {
     mapSim.current?.cancel();
     try {
       const { job } = buildResponseJob(sceneRef.current, b.dx, 2);
-      setStatus({ text: "Measuring the room response...", fraction: 0 });
-      const sim = startResponse(b, job, (f) => setStatus({ text: "Measuring the room response...", fraction: f }));
+      setStatus({ text: "Measuring how the room sounds...", fraction: 0 });
+      const sim = startResponse(b, job, (f) => setStatus({ text: "Measuring how the room sounds...", fraction: f }));
       respSim.current = sim as SimHandle<unknown>;
       sim.result
         .then((res) => {
@@ -383,8 +383,15 @@ export default function App() {
 
   return (
     <div className="app">
-      <h1>GhostField: bass ghost finder</h1>
-      <p className="note">Horizontal modes (2D plan view, no floor-to-ceiling modes). A model, not a measurement. Thin foam does little below 300 Hz; that is the physics, not a bug.</p>
+      <a className="back" href="../">&larr; Back to home</a>
+      <h1>Find where bass booms in your room</h1>
+      <p className="lead">This simulates sound waves bouncing around a room, right in your browser. Low notes pile up in some spots (boom) and cancel in others (quiet).</p>
+      <ol className="steps">
+        <li><b>1</b> Drag SUB (your speaker) and SEAT (where you listen).</li>
+        <li><b>2</b> Click an orange dot on the chart (it appears after a few seconds): that note booms in your room.</li>
+        <li><b>3</b> Read the map: red = boom, blue = quiet. Add foam to tame it.</li>
+      </ol>
+      <p className="small">Honest note: this is a flat top-down view, so it shows side-to-side booms only, not floor-to-ceiling ones. It is a model, not a measurement. Thin foam does little for deep bass; that is physics, not a bug.</p>
       <div className="bar">
         <label>
           Room{" "}
@@ -411,10 +418,10 @@ export default function App() {
         )}
       </div>
       <div className="bar">
-        Trap (drag on the plan):
+        Bass trap (drag on the map):
         {(["foam", "chunk", "erase"] as Tool[]).map((t) => (
           <button key={t} className={tool === t ? "on" : ""} onClick={() => setTool(t)}>
-            {t === "erase" ? "Erase trap" : `${TRAPS[t].label} (Rf ${TRAPS[t].rf.toLocaleString("en")})`}
+            {t === "erase" ? "Erase trap" : t === "foam" ? "Foam panel (5 cm)" : "Big corner block (60 cm)"}
           </button>
         ))}
         <button onClick={() => edit({ ...sceneRef.current, traps: [] })}>Clear traps</button>
@@ -422,33 +429,44 @@ export default function App() {
       <div className="cols">
         <div>
           <div className={`stage${stale ? " stale" : ""}`}>
+            {!mapRef.current && (
+              <div className="wait">
+                <div>Working out the room… a few seconds</div>
+                <progress value={status.fraction ?? undefined} max={1} />
+              </div>
+            )}
             <canvas ref={planRef} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} />
           </div>
           <div className="legend">
             <div className="grad" style={{ background: "linear-gradient(90deg, rgb(0,0,77), rgb(0,150,255), rgb(0,255,60), rgb(255,200,0), rgb(255,0,0))" }} />
             <div className="ticks">
-              <span>null (quiet, -{MAP_DB} dB)</span>
-              <span>boom (loud, 0 dB)</span>
+              <span>Quiet</span>
+              <span>Medium</span>
+              <span>Boom (loud)</span>
             </div>
-            Map at {freq.toFixed(1)} Hz. Drag SUB or SEAT. Orange = foam, purple = superchunk.
+            Map of one note: {freq.toFixed(1)} Hz (Hz is pitch: a small number is a deep note). Drag SUB or SEAT to move them. Orange = foam panel, purple = corner block. Dark grey = wall.
+            <div className="small">Blue has about 10,000 times less sound power than red.</div>
           </div>
         </div>
         <div>
-          <canvas ref={chartRef} className="chart" onClick={onChartClick} />
-          <div className="legend">Response at the seat, dB relative to the highest peak. Click a peak (orange dot) to see its mode shape.</div>
+          <div className="chartbox">
+            <canvas ref={chartRef} className="chart" onClick={onChartClick} />
+            {!response && <div className="wait">Measuring the room… orange dots appear here in a few seconds</div>}
+          </div>
+          <div className="legend">What you hear at SEAT for each note (low to high pitch), compared with the loudest. Dips are notes that vanish, orange dots are notes that boom. Click a dot to see where it booms. Yellow line = the note on the map.</div>
           <div className="bar">
             <label>
               Frequency{" "}
               <input type="range" min={F_MIN} max={F_MAX} step={0.5} value={freq} onChange={(e) => chooseFreq(+e.target.value)} /> {freq.toFixed(1)} Hz
             </label>
-            <span>{relDb >= 0 ? "+" : ""}{relDb.toFixed(1)} dB vs the room median</span>
+            <span>{!response ? "" : relDb >= 3 ? "At your seat this note is louder than most of the room." : relDb <= -3 ? "At your seat this note is quieter than most of the room." : "At your seat this note is about average."}</span>
           </div>
           <div className="bar">
             <label>
               Sound{" "}
               <select value={mode} onChange={(e) => setMode(e.target.value as PlayMode)}>
-                <option value="laptop">Laptop mode (harmonic stack)</option>
-                <option value="tone">Normal (the low tone itself)</option>
+                <option value="laptop">Laptop speakers (adds higher tones so you can hear it)</option>
+                <option value="tone">Normal (the pure low tone)</option>
               </select>
             </label>
             <label>
@@ -471,14 +489,16 @@ export default function App() {
         </div>
       </div>
       <div className="status">
-        Backend:{" "}
-        {backend
-          ? backend.kind === "webgpu"
-            ? `WebGPU, cell ${backend.dx * 100} cm${room ? `, grid ${room.nx}x${room.ny}` : ""}`
-            : `CPU (Web Worker), cell ${backend.dx * 100} cm${room ? `, grid ${room.nx}x${room.ny}` : ""} (${backend.reason})`
-          : "..."}
         <div className={status.error ? "err" : ""}>{status.text}</div>
         {status.fraction !== null && <progress value={status.fraction} max={1} />}
+        <div className="small">
+          Running on:{" "}
+          {backend
+            ? backend.kind === "webgpu"
+              ? "your graphics chip"
+              : "your processor"
+            : "starting up..."}
+        </div>
       </div>
     </div>
   );

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GhostField: see invisible waves in your room</title>
+<style>
+  :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; background: #14161a; color: #e6e6e6; }
+  main { max-width: 900px; margin: 0 auto; padding: 40px 18px; }
+  h1 { font-size: 34px; margin: 0 0 12px; }
+  .lead { font-size: 20px; line-height: 1.4; margin: 0 0 12px; }
+  .why { color: #b9bec7; font-size: 16px; margin: 0 0 28px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 18px; }
+  .card { flex: 1 1 340px; display: block; text-decoration: none; color: inherit; background: #1d222b; border: 1px solid #3a414d; border-radius: 12px; padding: 24px; }
+  .card:hover, .card:focus { border-color: #6f8de0; background: #232a36; }
+  .card h2 { margin: 0 0 8px; font-size: 24px; }
+  .card p { margin: 0 0 16px; color: #b9bec7; }
+  .card span { display: inline-block; background: #3552a8; border-radius: 6px; padding: 8px 14px; }
+  footer { margin-top: 32px; font-size: 13px; color: #98a0ac; }
+  footer a { color: #8fb0ff; }
+</style>
+</head>
+<body>
+<main>
+  <h1>GhostField</h1>
+  <p class="lead">GhostField simulates invisible waves in a room, in your browser, so you can see where Wi-Fi is weak and where bass booms or vanishes.</p>
+  <p class="why">Why it is cool: one physics engine runs both radio waves and sound waves. Nothing to install, and nothing leaves your computer.</p>
+  <div class="cards">
+    <a class="card" href="wifi/">
+      <h2>Wi-Fi dead zones</h2>
+      <p>Find the dead zone in your flat.</p>
+      <span>Open the Wi-Fi app</span>
+    </a>
+    <a class="card" href="bass/">
+      <h2>Bass ghost finder</h2>
+      <p>Find where bass booms in your room.</p>
+      <span>Open the bass app</span>
+    </a>
+  </div>
+  <footer>Both apps are simple flat (2D) models, so they show the idea, not exact measurements. <a href="https://github.com/Prabodh1231/ghostfield">Source code</a> (MIT license).</footer>
+</main>
+</body>
+</html>

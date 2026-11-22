@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DB_MAX, DB_MIN, legendGradient, paintHeatmap } from "./heatmap";
+import { legendGradient, paintHeatmap } from "./heatmap";
 import { WALL_MATERIALS, wallMaterial, type WallMaterialId } from "./materials";
 import { CELL_M, buildJob, defaultScene, referencePower, toDb, type Scene, type Wall } from "./scene";
 import { pickBackend, startSim, type Backend, type SimHandle } from "./sim";
@@ -29,8 +29,9 @@ export default function App() {
   const [tool, setTool] = useState<Tool>("wall");
   const [material, setMaterial] = useState<WallMaterialId>("brick");
   const [draft, setDraft] = useState<Wall | null>(null);
-  const [status, setStatus] = useState<Status>({ text: "Detecting backend…", fraction: null });
+  const [status, setStatus] = useState<Status>({ text: "Starting up…", fraction: null });
   const [stale, setStale] = useState(false);
+  const [hasMap, setHasMap] = useState(false);
   const [cursorDb, setCursorDb] = useState<string>("");
 
   const heatRef = useRef<HTMLCanvasElement>(null);
@@ -78,6 +79,7 @@ export default function App() {
           dbRef.current = db;
           paintHeatmap(heatRef.current!, db, built.n);
           setStale(false);
+          setHasMap(true);
           setStatus({ text: `Done: ${r.steps} steps in ${((performance.now() - t0) / 1000).toFixed(1)} s`, fraction: null });
         })
         .catch((e) => setStatus({ text: `Simulation failed: ${String(e)}`, fraction: null, error: true }));
@@ -183,7 +185,7 @@ export default function App() {
       const i = Math.floor(p.x / CELL_M);
       const j = Math.floor(p.y / CELL_M);
       const v = i >= 0 && j >= 0 && i < backend.n && j < backend.n ? dbRef.current[j * backend.n + i]! : null;
-      setCursorDb(v === null ? "" : `${v.toFixed(1)} dB`);
+      setCursorDb(v === null ? "" : v > -10 ? "strong" : v > -25 ? "medium" : v > -45 ? "weak" : "dead");
     }
   };
 
@@ -212,25 +214,14 @@ export default function App() {
 
   return (
     <div className="app">
-      <h1>GhostField: Wi-Fi dead zones</h1>
-      <p className="note">
-        2D model of a 2.4 GHz router. Not a calibrated measurement: real rooms are 3D, and a 2D field fades more slowly with distance.
-      </p>
-      <div className="bar">
-        <span>
-          Backend:{" "}
-          <strong>
-            {!backend ? "…" : backend.kind === "webgpu" ? "WebGPU" : "CPU (Web Worker)"}
-          </strong>
-          {backend && (
-            <>
-              {" "}
-              · {backend.n}×{backend.n} cells @ {(CELL_M * 100).toFixed(1)} cm · room {roomM.toFixed(2)} m
-              {backend.kind === "cpu" && ` · WebGPU not used: ${backend.reason}`}
-            </>
-          )}
-        </span>
-      </div>
+      <a className="back" href="../">&larr; Back to home</a>
+      <h1>Find the dead zone in your flat</h1>
+      <p className="lead">This simulates Wi-Fi waves moving through a floor plan, right in your browser. The map shows where the signal is strong and where it dies.</p>
+      <ol className="steps">
+        <li><b>1</b> Draw walls: pick a material, then drag on the map.</li>
+        <li><b>2</b> Drag the green dot (your router) to a new spot.</li>
+        <li><b>3</b> Read the map: bright = strong signal, dark = weak or dead.</li>
+      </ol>
       <div className="bar">
         <button className={tool === "wall" ? "on" : ""} onClick={() => setTool("wall")}>
           Draw wall
@@ -249,14 +240,20 @@ export default function App() {
           </select>
         </label>
         <button onClick={clearWalls}>Clear walls</button>
-        <button onClick={resetScene}>Example flat</button>
-        <button onClick={run}>Run again</button>
+        <button onClick={resetScene}>Back to example flat</button>
+        <button onClick={run}>Redraw map</button>
       </div>
       <p className="note">
-        Drag the green router. Draw a wall by dragging (hold Shift for straight lines). The map updates after each change.
+        The map redraws a moment after each change. Hold Shift while drawing for a straight wall.
       </p>
       <div className={`stage${stale ? " stale" : ""}`}>
         <canvas ref={heatRef} className="heat" />
+        {!hasMap && (
+          <div className="wait">
+            <div>Working out the signal… a few seconds</div>
+            <progress value={status.fraction ?? undefined} max={1} />
+          </div>
+        )}
         <canvas
           ref={overlayRef}
           className="overlay"
@@ -267,18 +264,23 @@ export default function App() {
         />
       </div>
       <div className="legend">
-        <strong>Relative signal (2D model)</strong>
+        <strong>Signal strength</strong>
         <div className="grad" style={{ background: legendGradient() }} />
         <div className="ticks">
-          <span>{DB_MIN} dB</span>
-          <span>{DB_MAX} dB</span>
+          <span>Dead</span>
+          <span>Weak</span>
+          <span>Strong</span>
         </div>
-        <div className="note">0 dB = the average level on a ring 0.5 m around the router. Time-averaged |Ez|² of a 2.4 GHz wave. {cursorDb && `Under the cursor: ${cursorDb}`}</div>
+        <div className="note">Compared with the signal right next to the router. {cursorDb && `Under the cursor: ${cursorDb}`}</div>
+        <div className="small">
+          Honest note: this is a flat 2D picture of a Wi-Fi router, so the colours show relative strength, not exact signal. Real rooms are 3D, and in 2D the signal fades more slowly with distance.
+        </div>
       </div>
       <div className={`status${status.error ? " err" : ""}`}>
         {status.text}
         {status.fraction !== null && <progress value={status.fraction} max={1} />}
       </div>
+      {backend && <div className="small">Room is {roomM.toFixed(1)} m wide.</div>}
     </div>
   );
 }

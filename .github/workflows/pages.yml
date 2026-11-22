@@ -27,8 +27,9 @@ jobs:
       - run: pnpm --filter wifi-deadzone build
       - run: pnpm --filter bass-ghost-finder build
       - run: |
-          mkdir -p site/bass
-          cp -r apps/wifi-deadzone/dist/. site/
+          mkdir -p site/wifi site/bass
+          cp site-src/index.html site/index.html
+          cp -r apps/wifi-deadzone/dist/. site/wifi/
           cp -r apps/bass-ghost-finder/dist/. site/bass/
       - uses: actions/upload-pages-artifact@v3
         with:
