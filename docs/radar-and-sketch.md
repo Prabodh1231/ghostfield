@@ -1,6 +1,6 @@
-﻿# Radar look and "Use my floor plan"
+# Radar look and "Use my floor plan"
 
-Status: pull request #12 (open when this was written). Code: `apps/wifi-deadzone`, `apps/bass-ghost-finder`, shared helpers in `packages/ghostfield-ui`. Source: `ghostfield-radar/reports/radar-apps.md`.
+Status: merged in pull request #12 (946d1ea). Code: `apps/wifi-deadzone`, `apps/bass-ghost-finder`, shared helpers in `packages/ghostfield-ui`. Source: `ghostfield-radar/reports/radar-apps.md`.
 
 ## What a user sees
 - Colours: a dark-to-teal ramp (#05070B to #38F2D6). Alert red (#FF3B5C) is always paired with a shape: diagonal stripes (Wi-Fi dead zones, bass boom spots) and red diamonds on the bass chart.

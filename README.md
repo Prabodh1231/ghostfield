@@ -15,8 +15,6 @@ Built for the Kiroween 2026 hackathon (Skeleton Crew). MIT license.
 
 ## The radar look (Wi-Fi and bass apps)
 
-Note: this part is in pull request #12. It shows on the live site once that is merged.
-
 - The map fills the window. A small bar at the bottom holds the legend and help.
 - Click the map to send a ping. A wave ring spreads out and fades, and you hear a soft thump.
 - After you change something, a Before/After slider shows what changed.
@@ -69,7 +67,7 @@ Goal: reach the faint pulsing exit marker.
 ### What was not checked
 
 - Echo Stalker: a full play to the win screen, Retry and Next buttons by hand, and the sound by ear. The CPU fallback ran in Chrome with `?backend=cpu`, not on a PC without WebGPU. No "reduce flashing" switch exists. Only a drawn test image was used for sketches, not a photo of paper.
-- Radar look (PR #12): the CPU fallback in the browser, reduced-motion switched on, the sound by ear, phones and small screens, and real paper photos. Of the mission ticks only the ping tick was seen. In the bass import the area outside the drawn room shows as grey wall.
+- Radar look: the CPU fallback in the browser, reduced-motion switched on, the sound by ear, phones and small screens, and real paper photos. Of the mission ticks only the ping tick was seen. In the bass import the area outside the drawn room shows as grey wall.
 - GPU time was measured in Node, and frame time in one Chrome on one Windows PC with an NVIDIA GPU. Other machines were not tried.
 
 Details: [docs/echo-stalker.md](docs/echo-stalker.md), [docs/radar-and-sketch.md](docs/radar-and-sketch.md).
