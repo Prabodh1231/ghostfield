@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["@webgpu/types", "vite/client"],
+    "baseUrl": ".",
+    "paths": { "@core/*": ["../../packages/ghostfield-core/src/*"], "@ui": ["../../packages/ghostfield-ui/src/index.ts"], "@ui/*": ["../../packages/ghostfield-ui/src/*"] }
+  },
+  "include": ["src", "tests"]
+}

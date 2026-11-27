@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Echo Stalker: a game where you cannot see, only hear</title>
+  </head>
+  <body>
+    <div id="stage">
+      <canvas id="view" aria-label="Game view. The screen is black on purpose."></canvas>
+      <div id="hud" hidden>
+        <span id="levelName"></span>
+        <button id="mute" type="button" title="Sound on or off">Sound: on</button>
+        <button id="helpBtn" type="button" title="How to play">?</button>
+      </div>
+      <div id="toast" hidden></div>
+
+      <section id="start" class="panel">
+        <h1>Echo Stalker</h1>
+        <p class="lead">You cannot see. Clap to send a sound wave. Walls glow where it hits. It hears you too.</p>
+        <ul class="controls">
+          <li><b>W A S D</b> or arrows: walk (your steps make soft sounds; hold <b>Shift</b> to sneak silently)</li>
+          <li><b>Space</b>: loud clap. Shows the room, but the monster hears it</li>
+          <li><b>Click</b>: throw a pebble. The sound lands where you click, to lure the monster away</li>
+          <li>Grey dotted zones soak up sound. Hide in them. Reach the faint pulsing exit.</li>
+          <li>Teal rings are your sounds. Red dashed rings are the monster's footsteps.</li>
+        </ul>
+        <p class="note">Needs a keyboard and a mouse. Turn your sound on.</p>
+        <div class="row" id="levelButtons"></div>
+        <div class="row"><button id="sketchBtn" type="button" class="ghost">Play your own sketch</button></div>
+        <p class="note">Same wave engine as the Wi-Fi and bass apps. It is a flat (2D) model of sound, so it shows the idea, not exact acoustics.</p>
+        <p class="note" id="backendNote"></p>
+      </section>
+
+      <section id="help" class="panel" hidden>
+        <h2>How to play</h2>
+        <p>You cannot see. Clap to send a sound wave. Walls glow where it hits. It hears you too.</p>
+        <ul class="controls">
+          <li><b>W A S D</b> or arrows: walk. <b>Shift</b>: sneak (silent, slower).</li>
+          <li><b>Space</b>: clap (loud). <b>Click</b>: throw a pebble.</li>
+          <li>Grey dotted zones soak up sound: hide there.</li>
+          <li>Red dashed rings: the monster is walking there.</li>
+        </ul>
+        <p class="note">Same wave engine as the Wi-Fi and bass apps. Flat (2D) model, not exact acoustics.</p>
+        <div class="row"><button id="helpClose" type="button">Back to the game</button></div>
+      </section>
+
+      <section id="over" class="panel" hidden>
+        <h2 id="overTitle"></h2>
+        <p id="overText"></p>
+        <div class="row"><button id="retry" type="button">Retry</button><button id="next" type="button" hidden>Next level</button><button id="menu" type="button" class="ghost">Menu</button></div>
+      </section>
+
+      <section id="sketch" class="panel" hidden>
+        <h2>Play your own sketch</h2>
+        <ol>
+          <li>Draw a floor plan with a dark pen on white paper (walls as lines, rooms at least 0.6 m wide). Take a photo or scan it.</li>
+          <li><input id="file" type="file" accept="image/*" /></li>
+          <li>Click two points on the picture that you know the real distance between.<br />Real distance in metres: <input id="metres" type="number" value="3" min="0.1" step="0.1" style="width: 5em" /></li>
+        </ol>
+        <canvas id="sketchCv" width="640" height="400"></canvas>
+        <p id="sketchMsg" class="note">Choose a picture first.</p>
+        <label class="note"><input id="underlay" type="checkbox" /> Show my picture faintly (15%) while I play</label>
+        <div class="row"><button id="sketchGo" type="button" disabled>Make my level</button><button id="sketchBack" type="button" class="ghost">Back</button></div>
+        <p class="note">The room can be up to 16 x 9.6 m. The picture never leaves your computer.</p>
+      </section>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
