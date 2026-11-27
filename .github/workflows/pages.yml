@@ -26,11 +26,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter wifi-deadzone build
       - run: pnpm --filter bass-ghost-finder build
+      - run: pnpm --filter echo-stalker build
       - run: |
-          mkdir -p site/wifi site/bass
+          mkdir -p site/wifi site/bass site/echo
           cp site-src/index.html site/index.html
           cp -r apps/wifi-deadzone/dist/. site/wifi/
           cp -r apps/bass-ghost-finder/dist/. site/bass/
+          cp -r apps/echo-stalker/dist/. site/echo/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

@@ -43,6 +43,15 @@ importers:
         specifier: ^8.3.8
         version: 8.3.8
 
+  apps/echo-stalker:
+    devDependencies:
+      '@webgpu/types':
+        specifier: ^0.1.74
+        version: 0.1.74
+      vite:
+        specifier: ^8.3.8
+        version: 8.3.8
+
   apps/wifi-deadzone:
     dependencies:
       react:
