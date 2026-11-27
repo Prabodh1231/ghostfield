@@ -125,6 +125,7 @@ function frame(now: number) {
   for (const e of world.events) sound(e, world);
   renderer.addEvents(world.events);
   world.events = [];
+  renderer.sneaking = inp.sneak;
   renderer.draw(Math.min(dt, 0.05));
   const t2 = performance.now();
   stats.simMs.push(t1 - t0);
@@ -134,7 +135,8 @@ function frame(now: number) {
     stats.simMs.shift();
   }
   void t2;
-  if (world.status !== "play") endScreen();
+  // a win waits for the door to swing open; a catch ends at once
+  if (world.status === "caught" || (world.status === "won" && renderer.doorFinished)) endScreen();
 }
 
 function endScreen() {
@@ -142,7 +144,7 @@ function endScreen() {
   const won = w.status === "won";
   const lastLevel = current!.idx >= LEVELS.length - 1 || current!.idx < 0;
   $("overTitle").textContent = won ? "You got out" : "It caught you";
-  $("overText").textContent = won ? (lastLevel ? "You escaped. Try your own sketch, or play again." : "You found the exit in the dark.") : "It heard you. Stay quiet, hide in the grey dotted zones, and throw a pebble to lure it away.";
+  $("overText").textContent = won ? (lastLevel ? "You escaped. Try your own sketch, or play again." : "You found the door in the dark.") : "It heard you. Stay quiet, hide in the grey dotted zones, and throw a pebble to lure it away.";
   $("next").hidden = !(won && !lastLevel);
   show("over");
 }

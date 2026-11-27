@@ -1,4 +1,5 @@
 import { PALETTE, ramp, createAfterglow, drawUnderlay, type Afterglow } from "@ui";
+import { doorDone, doorIsVertical, drawDoor, drawMonster, drawPlayer, drawPrint, PRINT_GAP, stepDoor, turnToward } from "./sprites";
 import type { GameEvent, World } from "./world";
 
 export const VIEW_W = 1280;
@@ -36,6 +37,21 @@ export class Renderer {
   /** Optional picture of the user's sketch, drawn at 15%. */
   underlay: { img: CanvasImageSource; w: number; h: number } | null = null;
   showUnderlay = false;
+  /** Set by the page each frame: Shift is held. */
+  sneaking = false;
+  /** Door openness 0..1; it opens once the player reaches it. */
+  doorOpen = 0;
+  private doorHeld = 0;
+  private doorVertical: boolean;
+  private calm = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  private face: [number, number] = [1, 0];
+  private lastP: [number, number];
+  private walkPhase = 0;
+  private walking = false;
+  private walked = 0;
+  private prints: { x: number; y: number; ang: number; left: boolean; age: number }[] = [];
+  private alarm: number[] = [];
+  private wasHunting: boolean[] = [];
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -51,6 +67,13 @@ export class Renderer {
     this.wallImg = this.wallCv.getContext("2d")!.createImageData(nx, ny);
     this.glowAfter = createAfterglow(nx, ny, 0.94);
     this.zoneLayer = this.buildZones();
+    this.doorVertical = doorIsVertical((x, y) => w.solidAt(x, y), w.level.exit[0], w.level.exit[1]);
+    this.lastP = [w.px, w.py];
+  }
+
+  /** True when the door has swung open and been held a moment: the page may show the win screen. */
+  get doorFinished(): boolean {
+    return doorDone(this.doorOpen, this.doorHeld);
   }
 
   /** Faint grey dots over the stealth zones. */
@@ -139,21 +162,12 @@ export class Renderer {
     ctx.drawImage(this.zoneLayer, 0, 0);
     ctx.globalAlpha = 1;
 
-    // 4. exit: a slow faint pulse
+    // 4. exit door: dark like the walls, lit by wave hits, with a faint teal glow at its foot
     const [ex, ey] = w.level.exit;
-    const pulse = 0.5 + 0.5 * Math.sin(w.time * 2.4);
-    ctx.strokeStyle = PALETTE.teal;
-    ctx.globalAlpha = 0.12 + 0.18 * pulse;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(ex * PX, ey * PX, (0.35 + 0.35 * pulse) * PX, 0, 6.283);
-    ctx.stroke();
-    ctx.globalAlpha = 0.25;
-    ctx.beginPath();
-    ctx.arc(ex * PX, ey * PX, 0.12 * PX, 0, 6.283);
-    ctx.fillStyle = PALETTE.teal;
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    this.doorOpen = stepDoor(this.doorOpen, dt, w.status === "won", this.calm);
+    if (this.doorOpen >= 1) this.doorHeld += dt;
+    const eu = Math.abs(u[Math.floor(ey / w.dx) * nx + Math.floor(ex / w.dx)] ?? 0);
+    drawDoor(ctx, ex * PX, ey * PX, PX, { vertical: this.doorVertical, lit: Math.min(1, eu * 3), open: this.doorOpen, time: w.time, calm: this.calm });
 
     // 5. rings (also show on a muted video): teal thin = you, red thick dashed = the monster
     for (const r of this.rings) r.age += dt;
@@ -171,26 +185,46 @@ export class Renderer {
     ctx.setLineDash([]);
     ctx.globalAlpha = 1;
 
-    // 6. monsters: seen only as a flash when a wave passes over them
-    for (const m of w.monsters) {
+    // 6. monsters: the body shows only when a wave passes over it; the eyes flare when it hunts
+    w.monsters.forEach((m, i) => {
       const ix = Math.floor(m.x / w.dx);
       const iy = Math.floor(m.y / w.dx);
-      const a = Math.min(1, Math.abs(u[iy * nx + ix] ?? 0) * 3);
-      if (a < 0.05) continue;
-      ctx.globalAlpha = a;
-      ctx.fillStyle = PALETTE.alert;
-      ctx.beginPath();
-      ctx.arc(m.x * PX, m.y * PX, 0.28 * PX, 0, 6.283);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+      const seen = Math.min(1, Math.abs(u[iy * nx + ix] ?? 0) * 3);
+      if (m.hunting && !this.wasHunting[i]) this.alarm[i] = 1;
+      this.wasHunting[i] = m.hunting;
+      const al = this.alarm[i] ?? 0;
+      this.alarm[i] = Math.max(0, al - dt * 1.4);
+      if (al > 0) {
+        // "it heard you": a red ring shrinks onto the monster
+        ctx.globalAlpha = al * 0.8;
+        ctx.strokeStyle = PALETTE.alert;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(m.x * PX, m.y * PX, (0.3 + 0.9 * al) * PX, 0, 6.283);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      drawMonster(ctx, m.x * PX, m.y * PX, PX, { hx: m.hx, hy: m.hy, time: w.time, hunting: m.hunting, seen: seen < 0.05 ? 0 : seen, alarm: al, calm: this.calm, seed: i * 1.9 });
+    });
 
-    // 7. you: a small dim dot
-    ctx.fillStyle = PALETTE.teal;
-    ctx.globalAlpha = 0.8;
-    ctx.beginPath();
-    ctx.arc(w.px * PX, w.py * PX, 0.14 * PX, 0, 6.283);
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    // 7. you: a hooded figure with a lantern, turning to face where you walk
+    const mvx = w.px - this.lastP[0];
+    const mvy = w.py - this.lastP[1];
+    const mv = Math.hypot(mvx, mvy);
+    this.walking = mv > 1e-4;
+    if (this.walking) {
+      this.face = turnToward(this.face[0], this.face[1], mvx / mv, mvy / mv, 1 - Math.exp(-dt * 14));
+      this.walkPhase += dt * (this.sneaking ? 0.5 : 1);
+      this.walked += mv;
+      if (this.walked >= PRINT_GAP) {
+        this.walked -= PRINT_GAP;
+        this.prints.push({ x: w.px, y: w.py, ang: Math.atan2(mvy, mvx), left: this.prints.length % 2 === 0, age: 0 });
+      }
+    }
+    this.lastP = [w.px, w.py];
+    for (const p of this.prints) p.age += dt;
+    this.prints = this.prints.filter((p) => p.age < 3.5);
+    for (const p of this.prints) drawPrint(ctx, p.x * PX, p.y * PX, PX, p.ang, p.left, 0.4 * (1 - p.age / 3.5));
+    drawPlayer(ctx, w.px * PX, w.py * PX, PX, { hx: this.face[0], hy: this.face[1], walking: this.walking, sneaking: this.sneaking, phase: this.walkPhase, calm: this.calm });
   }
 }
