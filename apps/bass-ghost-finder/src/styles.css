@@ -1,35 +1,91 @@
-:root { color-scheme: dark; font-family: system-ui, sans-serif; }
-body { margin: 0; background: #14161a; color: #e6e6e6; }
-.app { max-width: 1100px; margin: 0 auto; padding: 12px 16px 32px; }
-h1 { font-size: 20px; margin: 4px 0; }
-.note { font-size: 13px; color: #b9bec7; margin: 4px 0 10px; }
-.bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 10px; }
-.bar button, .bar select { background: #232830; color: inherit; border: 1px solid #3a414d; border-radius: 6px; padding: 5px 10px; font: inherit; }
-.bar button.on { background: #3552a8; border-color: #6f8de0; }
-.stage { position: relative; width: min(100%, 768px); aspect-ratio: 1; background: #000; touch-action: none; }
-.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
-.stage canvas.overlay { cursor: crosshair; image-rendering: auto; }
-.stage.stale canvas.heat { opacity: 0.45; }
-.legend { width: min(100%, 768px); margin-top: 8px; font-size: 13px; }
-.legend .grad { height: 12px; border-radius: 3px; margin: 4px 0 2px; }
-.legend .ticks { display: flex; justify-content: space-between; color: #b9bec7; }
-.status { margin: 8px 0; font-size: 14px; }
-progress { width: min(100%, 768px); height: 10px; display: block; margin-top: 4px; }
-.err { color: #ff8a80; }
-.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
-.cols { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
-.cols > div { flex: 1 1 360px; min-width: 0; }
-.stage { width: auto; max-width: 100%; aspect-ratio: auto; display: inline-block; touch-action: none; }
-.stage canvas { position: static; display: block; max-width: 100%; height: auto; cursor: crosshair; image-rendering: auto; }
-.chart { width: 100%; max-width: 640px; height: auto; cursor: pointer; }
-.bar input[type=number] { width: 4.5em; background: #232830; color: inherit; border: 1px solid #3a414d; border-radius: 6px; padding: 4px; }
-.back { font-size: 13px; color: #8fb0ff; text-decoration: none; }
-.lead { font-size: 15px; margin: 6px 0 10px; }
-.steps { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0 0 12px; }
-.steps li { flex: 1 1 220px; background: #1d222b; border: 1px solid #3a414d; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
-.steps b { display: inline-block; background: #3552a8; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; margin-right: 6px; }
-.small { font-size: 11.5px; color: #98a0ac; margin: 6px 0; }
+/* Radar look. Same file in both apps (apps/wifi-deadzone, apps/bass-ghost-finder). */
+:root { color-scheme: dark; font-family: system-ui, sans-serif; --bg: #05070b; --teal: #38f2d6; --alert: #ff3b5c; --chip: rgba(5, 7, 11, 0.78); --edge: rgba(56, 242, 214, 0.35); }
+html, body, #root { margin: 0; height: 100%; }
+body { background: var(--bg); color: #dff7f3; overflow: hidden; }
+button, select, input { font: inherit; }
+button, select { background: rgba(56, 242, 214, 0.08); color: inherit; border: 1px solid var(--edge); border-radius: 8px; padding: 5px 10px; cursor: pointer; }
+button:hover:not(:disabled) { background: rgba(56, 242, 214, 0.2); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.on { background: var(--teal); color: var(--bg); border-color: var(--teal); font-weight: 600; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+input[type="number"] { width: 5em; background: transparent; color: inherit; border: 1px solid var(--edge); border-radius: 6px; padding: 3px 6px; }
+a { color: var(--teal); }
+.small { font-size: 12px; color: #9fb7b3; margin: 4px 0; }
+.err { color: var(--alert); font-weight: 600; }
 
-.wait { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 16px; background: rgba(0,0,0,0.75); color: #fff; font-size: 17px; pointer-events: none; }
-.chartbox { position: relative; max-width: 640px; }
-.stage { position: relative; }
+.chip { background: var(--chip); border: 1px solid var(--edge); border-radius: 12px; backdrop-filter: blur(6px); }
+
+/* full-bleed picture */
+.stage { position: fixed; inset: 0; display: flex; align-items: flex-start; justify-content: center; background: var(--bg); touch-action: none; }
+.map { position: relative; }
+.map canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.map canvas.heat, .map canvas.before { image-rendering: pixelated; transition: opacity 0.2s; }
+.map canvas.overlay { cursor: crosshair; }
+.map.stale canvas.heat { opacity: 0.45; }
+.map .under { pointer-events: none; }
+.map .glow { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; opacity: 0; transition: opacity 0.25s; }
+.map.pinging .glow { opacity: 1; }
+.map.pinging canvas.heat { opacity: 0.3; }
+.wait { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 16px; background: rgba(5, 7, 11, 0.8); color: #fff; font-size: 17px; pointer-events: none; }
+progress { width: min(60vw, 320px); height: 8px; accent-color: var(--teal); }
+
+/* floating bits */
+.title { position: fixed; top: 10px; left: 10px; z-index: 5; padding: 6px 12px; max-width: min(70vw, 420px); }
+.title h1 { font-size: 15px; margin: 0; }
+.title a { font-size: 12px; text-decoration: none; }
+.missions { position: fixed; top: 64px; left: 10px; z-index: 5; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-width: min(60vw, 320px); }
+.missions li { background: var(--chip); border: 1px solid var(--edge); border-radius: 999px; padding: 4px 12px 4px 8px; font-size: 13px; backdrop-filter: blur(6px); }
+.missions li.done { border-color: var(--teal); text-decoration: line-through; color: #8fb3ae; }
+.missions .tick { display: inline-block; width: 1.2em; color: var(--teal); font-weight: 700; }
+.missions .t15 { font-size: 11px; color: var(--bg); background: var(--teal); border-radius: 6px; padding: 0 5px; margin-right: 4px; }
+.missions li.done .t15 { background: #4d6663; }
+.topright { position: fixed; top: 10px; right: 10px; z-index: 5; display: flex; gap: 8px; align-items: center; max-width: 70vw; }
+.topright .status { padding: 5px 10px; font-size: 12px; }
+.topright .qbtn { width: 34px; height: 34px; border-radius: 50%; padding: 0; font-weight: 700; }
+.hint { position: fixed; left: 0; right: 0; margin: 0 auto; width: fit-content; top: 40%; z-index: 4; font-size: 22px; padding: 12px 22px; pointer-events: none; transition: opacity 0.6s; text-align: center; }
+.hint.gone { opacity: 0; }
+.toast { position: fixed; left: 0; right: 0; margin: 0 auto; width: fit-content; top: 56px; z-index: 5; padding: 6px 14px; font-size: 13px; max-width: 92vw; text-align: center; }
+.wipebar { position: fixed; left: 0; right: 0; margin: 0 auto; width: fit-content; bottom: 138px; z-index: 5; display: flex; gap: 8px; align-items: center; padding: 6px 12px; background: var(--chip); border: 1px solid var(--edge); border-radius: 12px; font-size: 13px; }
+.wipebar input { width: min(40vw, 280px); accent-color: var(--teal); }
+
+.dock { position: fixed; left: 0; right: 0; margin: 0 auto; width: fit-content; bottom: 10px; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: center; padding: 8px 14px; max-width: 96vw; box-sizing: border-box; }
+.dock .tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; }
+.legend { font-size: 12px; min-width: 190px; }
+.legend .grad { height: 10px; border-radius: 3px; margin: 3px 0 2px; border: 1px solid var(--edge); }
+.legend .ticks { display: flex; justify-content: space-between; color: #9fb7b3; }
+.legend .hatch { display: inline-block; width: 14px; height: 10px; border: 1px solid var(--alert); vertical-align: -1px; margin-right: 4px; }
+.legend .key { display: flex; flex-wrap: wrap; gap: 2px 10px; color: #cfe8e4; }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 4px; vertical-align: -2px; border: 1px solid rgba(255,255,255,.4); }
+
+/* panels */
+.help, .panel { position: fixed; z-index: 7; background: rgba(5, 7, 11, 0.94); border: 1px solid var(--edge); border-radius: 14px; padding: 14px 16px; backdrop-filter: blur(8px); font-size: 14px; }
+.help { top: 54px; right: 10px; width: min(92vw, 400px); max-height: 80vh; overflow: auto; }
+.help h2 { font-size: 16px; margin: 0 0 6px; }
+.help p { margin: 6px 0; }
+.help ol { padding-left: 20px; margin: 6px 0; }
+.help .x { position: absolute; top: 6px; right: 8px; border: none; background: none; font-size: 22px; line-height: 1; padding: 2px 6px; }
+.panel { top: 54px; right: 10px; width: min(92vw, 400px); max-height: 80vh; overflow: auto; z-index: 6; }
+.panel.low { top: auto; bottom: 70px; }
+.panel label { display: block; margin: 6px 0; }
+.chart { width: 100%; height: auto; display: block; }
+
+.modal { position: fixed; inset: 0; z-index: 9; background: rgba(5, 7, 11, 0.85); display: flex; align-items: center; justify-content: center; padding: 10px; }
+.modal .card { background: #0a1016; border: 1px solid var(--edge); border-radius: 14px; padding: 16px; width: min(94vw, 560px); max-height: 92vh; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.modal h2 { margin: 0; font-size: 18px; }
+.modal ol { margin: 0; padding-left: 20px; font-size: 14px; }
+.modal .row { display: flex; gap: 8px; }
+.sketchview { max-width: 100%; max-height: 40vh; object-fit: contain; border: 1px solid var(--edge); cursor: crosshair; align-self: center; }
+
+@media (max-width: 640px) {
+  .missions { top: 56px; }
+  .missions li { font-size: 12px; }
+  .hint { font-size: 18px; }
+  .toast { top: 56px; }
+  .wipebar { bottom: 190px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+.map.stale canvas.plan { opacity: 0.5; }
+.map.pinging canvas.plan { opacity: 0.35; }
+.map canvas.plan { transition: opacity 0.2s; }

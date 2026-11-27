@@ -4,7 +4,7 @@
     "jsx": "react-jsx",
     "types": ["@webgpu/types", "vite/client"],
     "baseUrl": ".",
-    "paths": { "@core/*": ["../../packages/ghostfield-core/src/*"] }
+    "paths": { "@core/*": ["../../packages/ghostfield-core/src/*"], "@ui/*": ["../../packages/ghostfield-ui/src/*"] }
   },
   "include": ["src", "tests"]
 }

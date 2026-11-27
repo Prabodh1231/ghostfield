@@ -6,7 +6,12 @@ import { fileURLToPath } from "node:url";
 export default defineConfig({
   plugins: [react()],
   base: "./",
-  resolve: { alias: { "@core": fileURLToPath(new URL("../../packages/ghostfield-core/src", import.meta.url)) } },
+  resolve: {
+    alias: {
+      "@core": fileURLToPath(new URL("../../packages/ghostfield-core/src", import.meta.url)),
+      "@ui": fileURLToPath(new URL("../../packages/ghostfield-ui/src", import.meta.url)),
+    },
+  },
   worker: { format: "es" },
   build: { target: "es2022", sourcemap: false },
 });

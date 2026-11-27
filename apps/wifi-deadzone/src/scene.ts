@@ -24,9 +24,17 @@ export interface Router {
   y: number;
 }
 
+/** Walls found in a photo of a paper plan (@ui importSketch). cols x rows cells, top-left of the grid, 1 = wall. */
+export interface ImportedWalls {
+  mask: Uint8Array;
+  cols: number;
+  rows: number;
+}
+
 export interface Scene {
   walls: Wall[];
   router: Router;
+  imported?: ImportedWalls;
 }
 
 export interface BuiltJob {
@@ -84,6 +92,12 @@ export interface BuildOptions {
 export function buildJob(scene: Scene, n: number, opts: BuildOptions = {}): BuiltJob {
   const dx = CELL_M;
   const matIdx = rasterizeWalls(scene.walls, n, dx);
+  // Imported plan walls count as brick. Cells outside the grid are dropped.
+  if (scene.imported) {
+    const { mask, cols, rows } = scene.imported;
+    const brick = WALL_ORDER.indexOf("brick") + 1;
+    for (let j = 0; j < Math.min(rows, n); j++) for (let i = 0; i < Math.min(cols, n); i++) if (mask[j * cols + i]) matIdx[j * n + i] = brick;
+  }
   const table: Material[] = [AIR, ...WALL_ORDER.map((id) => (opts.materialOf ? opts.materialOf(id) : materialFor(id)))];
   // Fastest speed: free air (every material has C >= eps0 and L = mu0).
   const dt = (DEFAULT_COURANT * dx) / C0;
