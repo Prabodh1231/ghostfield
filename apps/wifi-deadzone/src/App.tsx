@@ -1,21 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createLiveSim, type LiveSim } from "@core/live";
 import { drawUnderlay } from "@ui/index";
-import { DEAD_DB, legendGradient, paintHeatmap } from "./heatmap";
+import { Coach, Ring, WIFI_END, WIFI_STEPS, useWaited } from "./coach";
+import { drawDevice, drawNoSignal, drawOuterWall, drawRoomLabel, drawRouter, drawWallLine } from "./draw";
+import { findDeadZones, levelOf, levelWord, paintGuess, paintHeatmap, smoothPower, type DeadZones } from "./heatmap";
 import { FREQ_HZ, WALL_MATERIALS, wallMaterial, type WallMaterialId } from "./materials";
-import { HATCH_CSS, HelpPanel, Missions, Pinger, SketchDialog, WipeBar, thump, useReducedMotion, type SketchApplied } from "./radar";
-import { CELL_M, buildJob, defaultScene, referencePower, toDb, type Scene, type Wall } from "./scene";
+import { HelpPanel, Pinger, SketchDialog, WipeBar, thump, useReducedMotion, type SketchApplied } from "./radar";
+import { CELL_M, CPML_CELLS, EXAMPLE_LABELS, buildJob, defaultDevices, defaultScene, referencePower, toDb, type Device, type Scene, type Wall } from "./scene";
 import { pickBackend, startSim, type Backend, type SimHandle } from "./sim";
 
 const CANVAS_PX = 768;
 const SNAP_M = 0.05;
 const GRAB_M = 0.2;
+/** Room side used to draw the plan before the backend is known (the GPU room). Positions are fractions, so the CPU room looks the same. */
+const PROVISIONAL_M = 7.68;
 /** Live pulse: steps per animation frame (GPU / CPU), and how long a pulse runs, in room crossings. */
 const SPF_GPU = 10;
 const SPF_CPU = 4;
 const COURANT = 0.693;
 
 type Tool = "wall" | "erase";
+type Drag = "router" | { dev: number } | null;
 interface Status {
   text: string;
   fraction: number | null;
@@ -30,29 +35,47 @@ function distToSeg(px: number, py: number, w: Wall): number {
   return Math.hypot(px - (w.x1 + t * dx), py - (w.y1 + t * dy));
 }
 
-function levelWord(v: number): string {
-  return v > -10 ? "strong" : v > -20 ? "medium" : v > DEAD_DB ? "weak" : "dead";
+function Bars({ level }: { level: number }) {
+  if (level === 0)
+    return (
+      <svg width="16" height="14" viewBox="0 0 16 14" aria-hidden>
+        <path d="M3 2 L13 12 M13 2 L3 12" stroke="#ff3b5c" strokeWidth="3" />
+      </svg>
+    );
+  return (
+    <svg width="16" height="14" viewBox="0 0 16 14" aria-hidden>
+      {[0, 1, 2].map((i) => (
+        <rect key={i} x={1 + i * 5} y={13 - (4 + i * 4)} width="3.5" height={4 + i * 4} fill={i < level ? "#38f2d6" : "rgba(159,183,179,0.35)"} />
+      ))}
+    </svg>
+  );
 }
 
 export default function App() {
   const [backend, setBackend] = useState<Backend | null>(null);
-  const [scene, setScene] = useState<Scene | null>(null);
+  const [scene, setScene] = useState<Scene | null>(() => defaultScene(PROVISIONAL_M));
+  const [devices, setDevices] = useState<Device[]>(() => defaultDevices(PROVISIONAL_M));
+  const [isExample, setIsExample] = useState(true);
   const [tool, setTool] = useState<Tool>("wall");
   const [material, setMaterial] = useState<WallMaterialId>("brick");
   const [draft, setDraft] = useState<Wall | null>(null);
   const [status, setStatus] = useState<Status>({ text: "Starting up…", fraction: null });
   const [stale, setStale] = useState(false);
   const [hasMap, setHasMap] = useState(false);
-  const [cursorDb, setCursorDb] = useState<string>("");
+  const [mapVersion, setMapVersion] = useState(0);
+  const [cursorWord, setCursorWord] = useState<string>("");
   const [helpOpen, setHelpOpen] = useState(false);
   const [sketchOpen, setSketchOpen] = useState(false);
-  const [hintGone, setHintGone] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [pinging, setPinging] = useState(false);
   const [toast, setToast] = useState("");
   const [wipe, setWipe] = useState({ show: false, pos: 50 });
   const [photoVersion, setPhotoVersion] = useState(0);
-  const [done, setDone] = useState({ dead: false, moved: false, wiped: false, ping: false });
+  const [done, setDone] = useState({ dead: false, moved: false, wiped: false, ping: false, wall: false });
+  const [step, setStep] = useState(0);
+  const [cssW, setCssW] = useState(CANVAS_PX);
   const reduced = useReducedMotion();
+  const waited = useWaited(step);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const heatRef = useRef<HTMLCanvasElement>(null);
@@ -64,16 +87,20 @@ export default function App() {
   const simRef = useRef<SimHandle | null>(null);
   const timerRef = useRef<number | undefined>(undefined);
   const toastTimer = useRef<number | undefined>(undefined);
-  const dragRef = useRef<"router" | null>(null);
+  const dragRef = useRef<Drag>(null);
   const clickRef = useRef<{ x: number; y: number } | null>(null);
+  /** Smoothed signal in dB (what the words and the map use). */
   const dbRef = useRef<Float32Array | null>(null);
+  const deadRef = useRef<DeadZones | null>(null);
   const hasMapRef = useRef(false);
   const frozenRef = useRef(false);
   const liveRef = useRef<LiveSim | null>(null);
   const pingerRef = useRef<Pinger | null>(null);
   const photoRef = useRef<{ photo: HTMLCanvasElement; wM: number; hM: number } | null>(null);
 
-  const roomM = backend ? backend.n * CELL_M : 0;
+  const roomM = backend ? backend.n * CELL_M : PROVISIONAL_M;
+  /** Icon and text scale: 1 on a big screen, about 2 on a phone, so the pictures stay readable. */
+  const u = Math.max(1, CANVAS_PX / cssW);
 
   const say = useCallback((text: string, ms = 7000) => {
     setToast(text);
@@ -97,23 +124,33 @@ export default function App() {
       sim.result
         .then((r) => {
           if (!r || simRef.current !== sim) return;
-          const ref = referencePower(r.power, built, s.router);
-          const db = toDb(r.power, ref);
+          // Average the ripples away first, so the map shows rooms and not stripes.
+          const smooth = smoothPower(r.power, built.n);
+          const ref = referencePower(smooth, built, s.router);
+          const db = toDb(smooth, ref);
           dbRef.current = db;
-          paintHeatmap(heatRef.current!, db, built.n);
+          const dz = findDeadZones(db, built.n);
+          deadRef.current = dz;
+          paintHeatmap(heatRef.current!, db, built.n, dz.mask);
           setStale(false);
           hasMapRef.current = true;
           setHasMap(true);
+          setMapVersion((v) => v + 1);
           if (frozenRef.current) {
             frozenRef.current = false;
             setWipe({ show: true, pos: 50 });
           }
-          setStatus({ text: `Done: ${r.steps} steps in ${((performance.now() - t0) / 1000).toFixed(1)} s`, fraction: null });
+          setStatus({ text: `Last map: ${r.steps} steps in ${((performance.now() - t0) / 1000).toFixed(1)} s`, fraction: null });
         })
         .catch((e) => setStatus({ text: `Simulation failed: ${String(e)}`, fraction: null, error: true }));
     } catch (e) {
       setStatus({ text: `Cannot start: ${String(e)}`, fraction: null, error: true });
     }
+  }, []);
+
+  // A picture on the first frame: a rough glow around the router. The plan itself is drawn by the overlay effect.
+  useEffect(() => {
+    if (heatRef.current) paintGuess(heatRef.current, 0.2, 0.5);
   }, []);
 
   useEffect(() => {
@@ -123,6 +160,7 @@ export default function App() {
       const s = defaultScene(b.n * CELL_M);
       sceneRef.current = s;
       setScene(s);
+      setDevices(defaultDevices(b.n * CELL_M));
       const crossing = b.n / COURANT;
       const p = new Pinger(b.kind === "webgpu" ? SPF_GPU : SPF_CPU, Math.round(1.6 * crossing));
       p.onActive = setPinging;
@@ -139,6 +177,15 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Track the drawn size of the map, for the icon scale and the grab distance.
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m) return;
+    const ro = new ResizeObserver(() => setCssW(m.getBoundingClientRect().width || CANVAS_PX));
+    ro.observe(m);
+    return () => ro.disconnect();
+  }, []);
+
   /** Run again shortly after the last edit. */
   const scheduleRun = useCallback(() => {
     setStale(true);
@@ -147,7 +194,7 @@ export default function App() {
   }, [run]);
 
   const edit = useCallback((next: Scene) => {
-    // The first edit after a settled map keeps that map as "before" for the wipe slider.
+    // The first edit after a settled map keeps that map as "before" for the compare bar.
     if (hasMapRef.current && !frozenRef.current && heatRef.current && beforeRef.current) {
       const h = heatRef.current;
       const b = beforeRef.current;
@@ -186,46 +233,45 @@ export default function App() {
     return c;
   }, [scene?.imported]);
 
-  // Floor plan overlay: imported walls, walls, draft wall, router.
+  /** Signal level at a spot (smoothed map), or null while there is no fresh map. */
+  const levelAt = useCallback(
+    (x: number, y: number): 0 | 1 | 2 | 3 | null => {
+      const n = backend?.n;
+      if (!n || !dbRef.current || !hasMap || stale) return null;
+      const i = Math.min(n - 1, Math.max(0, Math.floor(x / CELL_M)));
+      const j = Math.min(n - 1, Math.max(0, Math.floor(y / CELL_M)));
+      return levelOf(dbRef.current[j * n + i]!);
+    },
+    [backend, hasMap, stale],
+  );
+
+  // Floor plan overlay: outer wall, imported walls, walls, room names, no-signal tags, router, devices. Drawn from the first frame.
   useEffect(() => {
     const c = overlayRef.current;
-    if (!c || !scene || !backend) return;
+    if (!c || !scene) return;
     c.width = CANVAS_PX;
     c.height = CANVAS_PX;
     const g = c.getContext("2d")!;
     const k = CANVAS_PX / roomM;
     g.clearRect(0, 0, CANVAS_PX, CANVAS_PX);
+    drawOuterWall(g, CANVAS_PX, CPML_CELLS * CELL_M * k, u);
     if (importedCanvas && scene.imported) {
       g.imageSmoothingEnabled = false;
       g.drawImage(importedCanvas, 0, 0, scene.imported.cols * CELL_M * k, scene.imported.rows * CELL_M * k);
     }
     const line = (w: Wall, alpha = 1) => {
       const info = wallMaterial(w.material);
-      g.globalAlpha = alpha;
-      g.strokeStyle = info.color;
-      g.lineWidth = Math.max(3, info.thickness * k);
-      g.lineCap = "butt";
-      g.beginPath();
-      g.moveTo(w.x1 * k, w.y1 * k);
-      g.lineTo(w.x2 * k, w.y2 * k);
-      g.stroke();
-      g.globalAlpha = 1;
+      drawWallLine(g, w.x1 * k, w.y1 * k, w.x2 * k, w.y2 * k, info.color, Math.max(3 * u, info.thickness * k), alpha);
     };
     scene.walls.forEach((w) => line(w));
     if (draft) line(draft, 0.6);
-    g.fillStyle = "#ffffff";
-    g.strokeStyle = "#05070b";
-    g.lineWidth = 3;
-    g.beginPath();
-    g.arc(scene.router.x * k, scene.router.y * k, 10, 0, Math.PI * 2);
-    g.fill();
-    g.stroke();
-    g.strokeStyle = "#38f2d6";
-    g.lineWidth = 2;
-    g.beginPath();
-    g.arc(scene.router.x * k, scene.router.y * k, 16, 0, Math.PI * 2);
-    g.stroke();
-  }, [scene, draft, backend, roomM, importedCanvas]);
+    if (isExample) for (const l of EXAMPLE_LABELS) drawRoomLabel(g, l.text, l.fx * CANVAS_PX, l.fy * CANVAS_PX, u);
+    if (hasMap && !stale && backend && deadRef.current) {
+      for (const b of deadRef.current.blobs.slice(0, 3)) drawNoSignal(g, b.cx * CELL_M * k, b.cy * CELL_M * k - 30 * u, u);
+    }
+    drawRouter(g, scene.router.x * k, scene.router.y * k, u, step === 1);
+    for (const d of devices) drawDevice(g, d.kind, d.x * k, d.y * k, levelAt(d.x, d.y), u);
+  }, [scene, draft, roomM, importedCanvas, devices, mapVersion, hasMap, stale, backend, isExample, u, step, levelAt]);
 
   // Faint photo of the paper plan, 15%, under the walls.
   useEffect(() => {
@@ -244,16 +290,27 @@ export default function App() {
     return { x: ((e.clientX - r.left) / r.width) * roomM, y: ((e.clientY - r.top) / r.height) * roomM };
   };
   const snap = (v: number) => Math.min(roomM, Math.max(0, Math.round(v / SNAP_M) * SNAP_M));
+  /** At least 26 screen pixels, so a finger can grab an icon. */
+  const grabM = Math.max(GRAB_M, (26 / cssW) * roomM);
 
-  const wordAt = (p: { x: number; y: number }): string => {
-    if (!dbRef.current || !backend) return "";
+  const cellAt = (p: { x: number; y: number }): number => {
+    const n = backend?.n;
+    if (!n) return -1;
     const i = Math.floor(p.x / CELL_M);
     const j = Math.floor(p.y / CELL_M);
-    return i >= 0 && j >= 0 && i < backend.n && j < backend.n ? levelWord(dbRef.current[j * backend.n + i]!) : "";
+    return i >= 0 && j >= 0 && i < n && j < n ? j * n + i : -1;
+  };
+  const wordAt = (p: { x: number; y: number }): string => {
+    const k = cellAt(p);
+    return k < 0 || !dbRef.current || stale ? "" : levelWord(dbRef.current[k]!);
+  };
+  const inDeadZone = (p: { x: number; y: number }): boolean => {
+    const k = cellAt(p);
+    return k >= 0 && !!deadRef.current?.mask[k];
   };
 
-  /** A click that was not a drag: send a live pulse from that spot. */
-  const ping = (p: { x: number; y: number }) => {
+  /** A tap that was not a drag: send a live wave from that spot. */
+  const sendWave = (p: { x: number; y: number }) => {
     const b = backendRef.current;
     const pg = pingerRef.current;
     if (!b || !pg || !sceneRef.current) return;
@@ -275,23 +332,33 @@ export default function App() {
       const ratio = 1 / 60 / ((b.kind === "webgpu" ? SPF_GPU : SPF_CPU) * sim.dt);
       say(`Slowed down about ${Math.round(ratio / 1e6)} million times so you can watch it. Real Wi-Fi crosses a room in about 25 billionths of a second. The thump is just for feel.`, 9000);
     } catch (e) {
-      say(`Ping is not available here: ${String(e)}`);
+      say(`Waves are not available here: ${String(e)}`);
     }
   };
 
   const onDown = (e: React.PointerEvent) => {
-    if (!scene) return;
-    setHintGone(true);
+    if (!scene || !backend) return;
     const p = toM(e);
-    if (wordAt(p) === "dead") setDone((d) => ({ ...d, dead: true }));
     overlayRef.current!.setPointerCapture(e.pointerId);
-    if (Math.hypot(p.x - scene.router.x, p.y - scene.router.y) < GRAB_M) {
+    const devIdx = devices.findIndex((d) => Math.hypot(p.x - d.x, p.y - d.y) < grabM);
+    if (Math.hypot(p.x - scene.router.x, p.y - scene.router.y) < grabM) {
       dragRef.current = "router";
-    } else if (tool === "wall") {
+    } else if (devIdx >= 0) {
+      dragRef.current = { dev: devIdx };
+      if (devices[devIdx]!.kind === "laptop") setDone((d) => ({ ...d, dead: true }));
+    } else {
+      if (inDeadZone(p)) setDone((d) => ({ ...d, dead: true }));
+      beginDraw(p);
+    }
+  };
+
+  const beginDraw = (p: { x: number; y: number }) => {
+    if (!scene) return;
+    if (tool === "wall") {
       setDraft({ x1: snap(p.x), y1: snap(p.y), x2: snap(p.x), y2: snap(p.y), material });
     } else {
       let best = -1;
-      let bestD = GRAB_M;
+      let bestD = grabM;
       scene.walls.forEach((w, i) => {
         const d = distToSeg(p.x, p.y, w);
         if (d < bestD) {
@@ -300,6 +367,7 @@ export default function App() {
         }
       });
       if (best >= 0) {
+        setIsExample(false);
         edit({ ...scene, walls: scene.walls.filter((_, i) => i !== best) });
         scheduleRun();
       } else clickRef.current = p;
@@ -307,11 +375,17 @@ export default function App() {
   };
 
   const onMove = (e: React.PointerEvent) => {
-    if (!scene) return;
+    if (!scene || !backend) return;
     const p = toM(e);
-    if (dragRef.current === "router") {
+    const drag = dragRef.current;
+    if (drag === "router") {
       const m = 0.4; // keep the router out of the absorbing edge layer
       edit({ ...scene, router: { x: Math.min(roomM - m, Math.max(m, p.x)), y: Math.min(roomM - m, Math.max(m, p.y)) } });
+    } else if (drag) {
+      const m = 0.3;
+      const x = Math.min(roomM - m, Math.max(m, p.x));
+      const y = Math.min(roomM - m, Math.max(m, p.y));
+      setDevices((ds) => ds.map((d, i) => (i === drag.dev ? { ...d, x, y } : d)));
     } else if (draft) {
       let x2 = snap(p.x);
       let y2 = snap(p.y);
@@ -322,26 +396,30 @@ export default function App() {
       }
       setDraft({ ...draft, x2, y2 });
     } else {
-      const w = wordAt(p);
-      setCursorDb(w);
-      if (w === "dead") setDone((d) => (d.dead ? d : { ...d, dead: true }));
+      setCursorWord(wordAt(p));
+      if (inDeadZone(p)) setDone((d) => (d.dead ? d : { ...d, dead: true }));
     }
   };
 
   const onUp = () => {
     if (!scene) return;
-    if (dragRef.current === "router") {
+    const drag = dragRef.current;
+    if (drag === "router") {
       dragRef.current = null;
       setDone((d) => ({ ...d, moved: true }));
       scheduleRun();
+    } else if (drag) {
+      dragRef.current = null;
     } else if (draft) {
       if (Math.hypot(draft.x2 - draft.x1, draft.y2 - draft.y1) >= SNAP_M) {
+        setIsExample(false);
+        setDone((d) => ({ ...d, wall: true }));
         edit({ ...scene, walls: [...scene.walls, draft] });
         scheduleRun();
-      } else ping({ x: draft.x1, y: draft.y1 });
+      } else sendWave({ x: draft.x1, y: draft.y1 });
       setDraft(null);
     } else if (clickRef.current) {
-      ping(clickRef.current);
+      sendWave(clickRef.current);
       clickRef.current = null;
     }
   };
@@ -350,6 +428,7 @@ export default function App() {
     if (!scene) return;
     photoRef.current = null;
     setPhotoVersion((v) => v + 1);
+    setIsExample(false);
     edit({ walls: [], router: scene.router });
     scheduleRun();
   };
@@ -357,6 +436,8 @@ export default function App() {
     if (!backend) return;
     photoRef.current = null;
     setPhotoVersion((v) => v + 1);
+    setIsExample(true);
+    setDevices(defaultDevices(roomM));
     edit(defaultScene(roomM));
     scheduleRun();
   };
@@ -365,17 +446,43 @@ export default function App() {
     if (!scene) return;
     photoRef.current = { photo, wM: result.cols * result.metresPerCell, hM: result.rows * result.metresPerCell };
     setPhotoVersion((v) => v + 1);
+    setIsExample(false);
     const m = 0.5;
     edit({ walls: [], router: { x: Math.min(roomM - m, Math.max(m, scene.router.x)), y: Math.min(roomM - m, Math.max(m, scene.router.y)) }, imported: { mask: result.solid, cols: result.cols, rows: result.rows } });
     setSketchOpen(false);
     scheduleRun();
   };
 
-  const missions = [
-    { label: "Find the dead zone (hover over the striped red area)", done: done.dead },
-    { label: "Move the router, then wipe to compare", done: done.moved && done.wiped },
-    { label: "Click anywhere to ping and watch the wave", done: done.ping },
-  ];
+  // Coach: a finished step moves on by itself. Steps already done earlier are skipped.
+  useEffect(() => {
+    if (!hasMap || step >= WIFI_STEPS.length) return;
+    const ok = [done.dead, done.moved && !stale, done.wiped, done.ping, done.wall];
+    if (ok[step]) setStep(step + 1);
+  }, [hasMap, step, done, stale]);
+  // After the last step, the closing line stays 8 s, then goes.
+  useEffect(() => {
+    if (step !== WIFI_STEPS.length) return;
+    const t = window.setTimeout(() => setStep(WIFI_STEPS.length + 1), 8000);
+    return () => window.clearTimeout(t);
+  }, [step]);
+  // CSS rings on buttons (compare bar, Draw wall) follow these two attributes.
+  useEffect(() => {
+    document.body.dataset.coach = String(step);
+    document.body.dataset.wait = waited ? "1" : "0";
+  }, [step, waited]);
+
+  // Where the map ring goes for the current step, as fractions of the map side.
+  let ring: { fx: number; fy: number } | null = null;
+  if (scene && step === 0 && hasMap && deadRef.current?.blobs[0] && backend) ring = { fx: deadRef.current.blobs[0].cx / backend.n, fy: deadRef.current.blobs[0].cy / backend.n };
+  else if (scene && step === 0 && hasMap && devices[2]) ring = { fx: devices[2].x / roomM, fy: devices[2].y / roomM };
+  else if (scene && step === 1) ring = { fx: scene.router.x / roomM, fy: scene.router.y / roomM };
+  else if (step === 3) ring = { fx: 0.5, fy: 0.5 };
+  else if (step === WIFI_STEPS.length) {
+    const lap = devices.find((d) => d.kind === "laptop");
+    if (lap) ring = { fx: lap.x / roomM, fy: lap.y / roomM };
+  }
+
+  const showStatus = status.error || (hasMap && status.fraction !== null);
 
   return (
     <>
@@ -384,26 +491,32 @@ export default function App() {
           <canvas ref={heatRef} className="heat" />
           <canvas ref={beforeRef} className="before" style={{ visibility: wipe.show ? "visible" : "hidden", clipPath: `inset(0 ${100 - wipe.pos}% 0 0)` }} />
           <canvas ref={underRef} className="under" />
-          {!hasMap && (
-            <div className="wait">
-              <div>Working out the signal… a few seconds</div>
-              <progress value={status.fraction ?? undefined} max={1} />
-            </div>
-          )}
           <canvas ref={overlayRef} className="overlay" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} />
+          {ring && <Ring fx={ring.fx} fy={ring.fy} pulse={waited} />}
         </div>
       </div>
 
       <div className="chip title">
         <a href="../">&larr; Home</a>
-        <h1>Find the dead zone in your flat</h1>
+        <h1>
+          <span className="long">Find the Wi-Fi dead zone in your flat</span>
+          <span className="short">Find the dead zone</span>
+        </h1>
       </div>
-      <Missions items={missions} />
-      <div className="topright">
-        <div className={`chip status${status.error ? " err" : ""}`}>
-          {status.text}
-          {status.fraction !== null && <progress value={status.fraction} max={1} style={{ width: 90, marginLeft: 8 }} />}
+      <Coach steps={WIFI_STEPS} end={WIFI_END} index={step} onSkip={() => setStep((s) => s + 1)} />
+      {!hasMap && !status.error && (
+        <div className="chip wait" role="status">
+          <span>Working out the real signal… a few seconds</span>
+          <progress value={status.fraction ?? undefined} max={1} />
         </div>
+      )}
+      <div className="topright">
+        {showStatus && (
+          <div className={`chip status${status.error ? " err" : ""}`}>
+            {status.text}
+            {status.fraction !== null && <progress value={status.fraction} max={1} style={{ width: 90, marginLeft: 8 }} />}
+          </div>
+        )}
         <button className="chip qbtn" onClick={() => setHelpOpen((v) => !v)} aria-label="How does this work?" aria-expanded={helpOpen}>
           ?
         </button>
@@ -411,20 +524,19 @@ export default function App() {
       {helpOpen && (
         <HelpPanel onClose={() => setHelpOpen(false)}>
           <h2>How this works</h2>
-          <p>This simulates Wi-Fi waves moving through a floor plan, right in your browser. The map shows where the signal is strong and where it dies.</p>
+          <p>This is a flat’s floor plan seen from above. The teal shows where Wi-Fi reaches.</p>
           <ol>
-            <li>Draw walls: pick a material, then drag on the map.</li>
-            <li>Drag the white dot (your router) to a new spot.</li>
-            <li>Read the map: bright teal = strong signal, dark = weak, red stripes = dead.</li>
+            <li>Drag the router to a new spot.</li>
+            <li>Draw walls: pick a wall type, then drag on the map.</li>
+            <li>The laptop, phone and TV show their signal as Great, OK, Weak or None. Drag them to try other spots.</li>
           </ol>
-          <p>Click anywhere (without dragging) to send one pulse and watch it spread. Hold Shift while drawing for a straight wall. The map redraws a moment after each change; then drag the Before/After slider to compare.</p>
+          <p>Tap anywhere (without dragging) to send one wave and watch it spread. Hold Shift while drawing for a straight wall. The map redraws a moment after each change. Then drag the Before | After bar to compare.</p>
           <p className="small">
-            Honest note: this is a flat 2D picture of a Wi-Fi router, so the colours show relative strength, not exact signal. Real rooms are 3D, and in 2D the signal fades more slowly with distance. The pulse is a slowed-down movie; the steady map is the main result. Room is {roomM.toFixed(1)} m wide
-            {backend ? `, running on ${backend.kind === "webgpu" ? "your graphics chip" : "your processor"}` : ""}.
+            Honest note: this is a flat top-down picture of a Wi-Fi router, so the colours show relative strength, not exact signal. Real rooms are 3D, and in this flat picture the signal fades more slowly with distance. The wave is a slowed-down movie; the steady map is the main result. Room is {roomM.toFixed(1)} m wide
+            {backend ? `, running on ${backend.kind === "webgpu" ? "your graphics chip" : "your processor"}` : ""}. {status.fraction === null && !status.error ? status.text : ""}
           </p>
         </HelpPanel>
       )}
-      <div className={`chip hint${hintGone || !hasMap ? " gone" : ""}`}>Click anywhere to ping</div>
       {toast && <div className="chip toast">{toast}</div>}
       {wipe.show && (
         <WipeBar
@@ -438,40 +550,44 @@ export default function App() {
       )}
       <div className="chip dock">
         <div className="legend">
-          <strong>Signal strength</strong>
-          <div className="grad" style={{ background: legendGradient() }} />
-          <div className="ticks">
-            <span>Weak</span>
-            <span>Strong</span>
+          <div className="levels">
+            {[3, 2, 1, 0].map((l) => (
+              <span key={l}>
+                <Bars level={l} />
+                {["None", "Weak", "OK", "Great"][l]}
+              </span>
+            ))}
           </div>
           <div className="key">
-            <span>
-              <span className="hatch" style={{ background: HATCH_CSS }} />
-              Dead zone (red stripes)
-            </span>
-            {cursorDb && <span>Under cursor: {cursorDb}</span>}
+            <span>Brighter teal means stronger Wi-Fi.</span>
+            {cursorWord && <span>Here: {cursorWord}</span>}
           </div>
         </div>
-        <div className="tools">
-          <button className={tool === "wall" ? "on" : ""} onClick={() => setTool("wall")}>
+        <div className={`tools${moreOpen ? " open" : ""}`}>
+          <button className={`b-draw${tool === "wall" ? " on" : ""}`} onClick={() => setTool("wall")}>
             Draw wall
           </button>
           <button className={tool === "erase" ? "on" : ""} onClick={() => setTool("erase")}>
             Erase wall
           </button>
-          <label>
-            <span className="swatch" style={{ background: wallMaterial(material).color }} />
-            <select value={material} onChange={(e) => setMaterial(e.target.value as WallMaterialId)} aria-label="Wall material">
-              {WALL_MATERIALS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button onClick={clearWalls}>Clear walls</button>
           <button onClick={resetScene}>Example flat</button>
-          <button onClick={() => setSketchOpen(true)}>Use my floor plan</button>
+          <button className="morebtn" onClick={() => setMoreOpen((v) => !v)} aria-expanded={moreOpen}>
+            More
+          </button>
+          <span className="extra">
+            <label>
+              <span className="swatch" style={{ background: wallMaterial(material).color }} />
+              <select value={material} onChange={(e) => setMaterial(e.target.value as WallMaterialId)} aria-label="Wall material">
+                {WALL_MATERIALS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button onClick={clearWalls}>Clear walls</button>
+            <button onClick={() => setSketchOpen(true)}>Use my floor plan</button>
+          </span>
         </div>
       </div>
       {sketchOpen && backend && (
