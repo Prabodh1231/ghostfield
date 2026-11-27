@@ -1,6 +1,6 @@
 # Echo Stalker (apps/echo-stalker)
 
-Branch `feat/echo-stalker`, stacked on `feat/radar-core` (PR #10). Live at `/echo/` once merged.
+Branch `feat/echo-stalker`, based on main after PR #10 (live sim core, squash-merged as 92dde83). Live at `/echo/` once merged.
 
 ## What is in
 - Black-screen echolocation game on `createLiveSim` (`@core`) with the `@ui` palette, 0.94 afterglow, thump and sketch importer. Own `@core` and `@ui` aliases in `vite.config.ts` and `tsconfig.json`. No new dependencies (same `vite` and `@webgpu/types` versions as wifi-deadzone, no React). `pnpm-lock.yaml` gains only the `apps/echo-stalker` importer (9 lines).
