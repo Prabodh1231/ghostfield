@@ -4,7 +4,9 @@ import { acousticCoefficients } from "@core/live/acoustics";
 import { createLiveSim, type LiveSim } from "@core/live";
 import { drawUnderlay } from "@ui/index";
 import { BassPlayer, levelAt, stackLevels, type PlayMode } from "./audio";
-import { HATCH_CSS, HelpPanel, Missions, PALETTE, Pinger, SketchDialog, WipeBar, hatchPixel, ramp, thump, useReducedMotion, type SketchApplied } from "./radar";
+import { HATCH_CSS, HelpPanel, PALETTE, Pinger, SketchDialog, WipeBar, hatchPixel, ramp, thump, useReducedMotion, type SketchApplied } from "./radar";
+import { COACH_STEPS, Coach } from "./coach";
+import { drawCouch, drawFloor, drawHighlight, drawOutline, drawRoomSize, drawSpeaker, drawSpot, findSpots, label, seatWord, sketchPower } from "./draw";
 import {
   FREQS,
   F_MAX,
@@ -32,6 +34,8 @@ const BOOM_DB = -3;
 const SPF_GPU = 4;
 const SPF_CPU = 2;
 const COURANT = 0.693;
+/** Cell size used to draw the room before the solver (and its backend) is known. */
+const DX_FIRST_PAINT = 0.05;
 /** The same ramp the map uses (cubed), so the legend matches the colours. */
 const LEGEND_GRADIENT = `linear-gradient(90deg, ${Array.from({ length: 11 }, (_, k) => {
   const [r, g, b] = ramp((k / 10) ** 3);
@@ -79,12 +83,15 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [panel, setPanel] = useState<"room" | "sound" | null>(() => (window.innerWidth >= 1500 ? "sound" : null));
   const [sketchOpen, setSketchOpen] = useState(false);
-  const [hintGone, setHintGone] = useState(false);
   const [pinging, setPinging] = useState(false);
   const [toast, setToast] = useState("");
   const [wipe, setWipe] = useState({ show: false, pos: 50 });
-  const [done, setDone] = useState({ boom: false, trap: false, wiped: false });
+  const [step, setStep] = useState(0);
+  const [gotIt, setGotIt] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [vw, setVw] = useState(window.innerWidth);
   const reduced = useReducedMotion();
+  const spotsRef = useRef<ReturnType<typeof findSpots> | null>(null);
 
   const mapDivRef = useRef<HTMLDivElement>(null);
   const planRef = useRef<HTMLCanvasElement>(null);
@@ -108,7 +115,10 @@ export default function App() {
   const pingerRef = useRef<Pinger | null>(null);
   const liveRef = useRef<LiveSim | null>(null);
 
-  const room = useMemo(() => (backend ? buildRoom(draft ? { ...scene, traps: [...scene.traps, draft] } : scene, backend.dx) : null), [scene, draft, backend]);
+  const room = useMemo(() => buildRoom(draft ? { ...scene, traps: [...scene.traps, draft] } : scene, backend?.dx ?? DX_FIRST_PAINT), [scene, draft, backend]);
+  const relDb = response ? levelAt(FREQS, response.db, freq) - Array.from(response.db).sort((a, b) => a - b)[response.db.length >> 1]! : 0;
+  const hasMap = mapRef.current !== null;
+  const coachTarget = step < COACH_STEPS.length && !(step === 4 && !wipe.show) ? COACH_STEPS[step]!.target : undefined;
 
   const say = useCallback((text: string, ms = 7000) => {
     setToast(text);
@@ -150,13 +160,14 @@ export default function App() {
           }
           c.getContext("2d")!.putImageData(img, 0, 0);
           mapRef.current = c;
+          spotsRef.current = findSpots(res.power, r.solid, r.nx, r.ny, r.dx);
           if (frozen.current) {
             frozen.current = false;
             setWipe({ show: true, pos: 50 });
           }
           setMapVersion((v) => v + 1);
           setStale(false);
-          setStatus({ text: `Done. Map at ${freqRef.current.toFixed(1)} Hz.`, fraction: null });
+          setStatus({ text: "Done. The map is ready.", fraction: null });
         })
         .catch((e) => setStatus({ text: `Map failed: ${String(e)}`, fraction: null, error: true }));
     } catch (e) {
@@ -179,13 +190,10 @@ export default function App() {
           if (!res || respSim.current !== (sim as SimHandle<unknown>)) return;
           const h = responseSpectrum(res, FREQS);
           const next = { db: Float64Array.from(h, (v) => 20 * Math.log10(Math.max(1e-30, v))) };
-          // Mission: a trap was added and the note on the map got at least 3 dB quieter at the seat.
+          // A foam piece was added and the note on the map got quieter at the seat: say how much.
           if (pendingTrap.current !== null) {
             const drop = pendingTrap.current - levelAt(FREQS, next.db, freqRef.current);
-            if (drop >= 3) {
-              setDone((d) => ({ ...d, trap: true }));
-              say(`The trap cut this note by ${drop.toFixed(0)} dB at your seat. Press Play to hear it.`);
-            }
+            if (drop >= 3) say(`Foam made your seat quieter: about ${Math.round(100 * (1 - 10 ** (-drop / 20)))}% less boom. Press Play to hear it.`);
             pendingTrap.current = null;
           }
           responseRef.current = next;
@@ -229,6 +237,7 @@ export default function App() {
         beforeMapRef.current = c;
         frozen.current = true;
       }
+      if (next.traps.length > sceneRef.current.traps.length) setStep((s) => (s === 2 ? 3 : s));
       if (next.traps.length > sceneRef.current.traps.length && responseRef.current && pendingTrap.current === null) {
         pendingTrap.current = levelAt(FREQS, responseRef.current.db, freqRef.current);
       }
@@ -257,17 +266,41 @@ export default function App() {
     [runMap],
   );
 
-  // Plan view: map, before/after wipe, photo, traps, subwoofer, seat.
+  useEffect(() => {
+    const onResize = () => setVw(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    const t1 = window.setTimeout(() => setGotIt(true), 6000);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.clearTimeout(t1);
+    };
+  }, []);
+
+  // Coach: step 1 moves on after "Got it" (or 6 s) once the real map is there. The last step hides after 8 s.
+  useEffect(() => {
+    if (step === 0 && gotIt && hasMap) setStep(1);
+    if (step === COACH_STEPS.length - 1) {
+      const t = window.setTimeout(() => setStep(COACH_STEPS.length), 8000);
+      return () => window.clearTimeout(t);
+    }
+  }, [step, gotIt, hasMap, mapVersion]);
+
+  // Plan view: floor, quick sketch or real map, before/after bar, photo, foam, outline, speaker, couch, markers.
   useEffect(() => {
     const c = planRef.current;
-    if (!c || !room || !backend) return;
+    if (!c) return;
     const k = PX_PER_M;
     c.width = Math.round(room.nx * room.dx * k);
     c.height = Math.round(room.ny * room.dx * k);
     const g = c.getContext("2d")!;
     const cell = room.dx * k;
+    const s = c.width / Math.max(1, c.clientWidth || c.width);
+    const px = Math.round(13 * s);
+    const u = Math.max(1, s * 0.85);
     g.fillStyle = PALETTE.bg;
     g.fillRect(0, 0, c.width, c.height);
+    drawFloor(g, room, k);
+    let spots = spotsRef.current;
     if (mapRef.current) {
       g.imageSmoothingEnabled = true;
       g.drawImage(mapRef.current, 0, 0, c.width, c.height);
@@ -287,8 +320,25 @@ export default function App() {
         g.stroke();
       }
     } else {
-      g.fillStyle = "#2a3440";
-      for (let j = 0; j < room.ny; j++) for (let i = 0; i < room.nx; i++) if (room.solid[j * room.nx + i]) g.fillRect(i * cell, j * cell, cell + 0.5, cell + 0.5);
+      // Quick sketch: no solver, so the picture is there at once. Labelled as rough.
+      const sk = sketchPower(scene, freq);
+      const sc = document.createElement("canvas");
+      sc.width = sk.nx;
+      sc.height = sk.ny;
+      const img = sc.getContext("2d")!.createImageData(sk.nx, sk.ny);
+      for (let i = 0; i < sk.power.length; i++) {
+        if (sk.solid[i]) {
+          img.data.set([42, 52, 64, 255], 4 * i);
+          continue;
+        }
+        const [R, G, B] = ramp(sk.power[i]! ** 2);
+        img.data.set([R, G, B, 153], 4 * i);
+      }
+      sc.getContext("2d")!.putImageData(img, 0, 0);
+      g.imageSmoothingEnabled = true;
+      g.drawImage(sc, 0, 0, c.width, c.height);
+      spots = scene.shape === "rect" && !scene.imported ? findSpots(sk.power, sk.solid, sk.nx, sk.ny, sk.cell) : null;
+      label(g, "Quick sketch. Exact map in a few seconds.", c.width / 2, c.height - px * 1.2, px, "#cfe8e4");
     }
     const ph = photoRef.current;
     if (ph) drawUnderlay(g, ph.photo, ph.wM * k, ph.hM * k, 0.15);
@@ -300,23 +350,22 @@ export default function App() {
           g.fillRect(i * cell, j * cell, cell + 0.5, cell + 0.5);
         }
       }
-    const dot = (p: { x: number; y: number }, color: string, label: string) => {
-      g.fillStyle = color;
-      g.strokeStyle = "#05070b";
-      g.lineWidth = 2;
-      g.beginPath();
-      g.arc(p.x * k, p.y * k, 14, 0, 2 * Math.PI);
-      g.fill();
-      g.stroke();
-      g.fillStyle = "#05070b";
-      g.font = "bold 10px system-ui";
-      g.textAlign = "center";
-      g.fillText(label, p.x * k, p.y * k + 3.5);
-    };
-    dot(scene.sub, "#ffd24a", "SUB");
-    dot(scene.seat, "#ffffff", "SEAT");
-  }, [room, backend, scene.sub, scene.seat, mapVersion, wipe, response]);
-
+    drawOutline(g, room, k);
+    drawRoomSize(g, scene, k, px);
+    if (spots) {
+      spots.loud.forEach((p, i) => drawSpot(g, p, k, "boom", px, coachTarget === "boom" && i === 0));
+      spots.quiet.forEach((p) => drawSpot(g, p, k, "quiet", px));
+    }
+    const sub = scene.sub;
+    const seat = scene.seat;
+    drawSpeaker(g, sub.x * k, sub.y * k, u);
+    label(g, "Speaker", sub.x * k, sub.y * k + 28 * u + px, px);
+    drawCouch(g, seat.x * k, seat.y * k, u);
+    label(g, "Your seat", seat.x * k, seat.y * k + 22 * u + px, px);
+    const word = hasMap && response ? seatWord(relDb) : "...";
+    label(g, word, seat.x * k, seat.y * k - 22 * u - px * 0.4, Math.round(px * 1.2), word === "Boomy" ? "#ff8aa0" : word === "Thin" ? "#ffd24a" : "#38f2d6");
+    if (coachTarget === "couch") drawHighlight(g, seat.x * k, seat.y * k, 40 * u);
+  }, [room, scene, freq, mapVersion, wipe, response, relDb, coachTarget, vw, hasMap]);
   // Response chart. Peaks are red diamonds (a shape as well as a colour).
   useEffect(() => {
     const c = chartRef.current;
@@ -342,16 +391,19 @@ export default function App() {
       g.stroke();
       g.fillText(`${f}`, xOf(f), B + 14);
     }
-    g.fillText("Hz", R - 6, B + 28);
+    g.textAlign = "left";
+    g.fillText("Deep notes", L, B + 28);
+    g.textAlign = "right";
+    g.fillText("High notes", R, B + 28);
+    g.textAlign = "left";
+    g.fillText("Louder is up", L + 6, T + 12);
     if (response) {
       const d = response.db;
       let mx = -Infinity;
       for (const v of d) mx = Math.max(mx, v);
       const span = 50;
       const yOf = (v: number) => B - ((Math.max(mx - span, v) - (mx - span)) / span) * (B - T);
-      g.textAlign = "right";
       for (let s = 0; s <= span; s += 10) {
-        g.fillText(`${-s}`, L - 6, yOf(mx - s) + 4);
         g.beginPath();
         g.moveTo(L, yOf(mx - s));
         g.lineTo(R, yOf(mx - s));
@@ -423,13 +475,12 @@ export default function App() {
       const ratio = 1 / 60 / ((b.kind === "webgpu" ? SPF_GPU : SPF_CPU) * sim.dt);
       say(`Slowed down about ${Math.round(ratio)} times so you can watch it. The thump is just for feel.`, 8000);
     } catch (e) {
-      say(`Ping is not available here: ${String(e)}`);
+      say(`The wave is not available here: ${String(e)}`);
     }
   };
 
   const onDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!room) return;
-    setHintGone(true);
     const p = planPoint(e);
     e.currentTarget.setPointerCapture(e.pointerId);
     const s = sceneRef.current;
@@ -517,7 +568,6 @@ export default function App() {
         }
       if (best >= 0) {
         f = FREQS[best]!;
-        setDone((d) => ({ ...d, boom: true }));
       }
     }
     chooseFreq(Math.round(f * 2) / 2);
@@ -531,38 +581,40 @@ export default function App() {
       player.current.volume = volume / 100;
       player.current.start(mode, freq, stackLevels(FREQS, response.db, freq));
       setPlaying(true);
+      setStep((s) => (s === 1 || s === 3 ? s + 1 : s));
     }
   };
 
-  const relDb = response ? levelAt(FREQS, response.db, freq) - Array.from(response.db).sort((a, b) => a - b)[response.db.length >> 1]! : 0;
-  const hasMap = mapRef.current !== null;
-  const ratio = room ? room.nx / room.ny : 1;
-
-  const missions = [
-    { label: "Find a boom (click a red diamond on the chart)", done: done.boom },
-    { label: "Add a trap and hear the boom drop", done: done.trap },
-    { label: "Wipe to compare before and after", done: done.wiped },
-  ];
+  const ratio = room.nx / room.ny;
+  const ring = (target: string) => (coachTarget === target ? " ring" : "");
 
   return (
     <>
       <div className="stage">
-        <div ref={mapDivRef} className={`map${stale ? " stale" : ""}${pinging ? " pinging" : ""}`} style={{ width: `min(100vw, calc((100vh - 130px) * ${ratio}))`, aspectRatio: String(ratio) }}>
+        <div ref={mapDivRef} className={`map${stale ? " stale" : ""}${pinging ? " pinging" : ""}`} style={{ "--r": String(ratio), aspectRatio: String(ratio) } as React.CSSProperties}>
           <canvas ref={planRef} className="plan" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} style={{ cursor: "crosshair" }} />
-          {!hasMap && (
-            <div className="wait">
-              <div>Working out the room… a few seconds</div>
-              <progress value={status.fraction ?? undefined} max={1} />
-            </div>
-          )}
         </div>
+        {step < COACH_STEPS.length && !(step === 4 && !wipe.show) && (
+          <Coach
+            step={step}
+            onSkip={() => {
+              if (step === 0) setGotIt(true);
+              else setStep((s) => s + 1);
+            }}
+          />
+        )}
       </div>
+      {!hasMap && (
+        <div className="chip wait" role="status">
+          <div>Working out the exact map... a few seconds</div>
+          <progress value={status.fraction ?? undefined} max={1} />
+        </div>
+      )}
 
       <div className="chip title">
         <a href="../">&larr; Home</a>
         <h1>Find where bass booms in your room</h1>
       </div>
-      <Missions items={missions} />
       <div className="topright">
         <div className={`chip status${status.error ? " err" : ""}`}>
           {status.text}
@@ -575,26 +627,25 @@ export default function App() {
       {helpOpen && (
         <HelpPanel onClose={() => setHelpOpen(false)}>
           <h2>How this works</h2>
-          <p>This simulates sound waves bouncing around a room, right in your browser. Low notes pile up in some spots (boom) and cancel in others (quiet).</p>
+          <p>This is your room seen from above. It shows how sound waves bounce around it, right in your browser. Low notes pile up in some spots (boom) and cancel in others (quiet).</p>
           <ol>
-            <li>Drag SUB (your speaker) and SEAT (where you listen).</li>
-            <li>In the chart, click a red diamond (it appears after a few seconds): that note booms in your room.</li>
-            <li>Read the map: bright teal = loud, dark = quiet, red stripes = the boom. Add foam to tame it.</li>
+            <li>Drag the speaker and the couch (where you listen) to new spots.</li>
+            <li>Press Play bass to hear the note from your seat.</li>
+            <li>Read the map: bright teal = loud, dark = quiet, red rings = boom. Press Add foam, then drag along a wall to calm the boom.</li>
           </ol>
-          <p>Click anywhere in the room to send one pulse and watch it bounce. The Before/After slider appears after you change something.</p>
+          <p>Press Send a wave, then click the room to send one wave and watch it bounce. The Before | After bar appears after you change something. In Chart &amp; sound, click a red marker to map that boomy note.</p>
           <p className="small">
-            Honest note: this is a flat top-down view, so it shows side-to-side booms only, not floor-to-ceiling ones. It is a model, not a measurement. Thin foam does little for deep bass; that is physics, not a bug. The pulse is a slowed-down movie; the steady map is the main result.
+            Honest note: this is a flat top-down view, so it shows side-to-side booms only, not floor-to-ceiling ones. It is a model, not a measurement. Thin foam does little for deep bass; that is physics, not a bug. The wave is a slowed-down movie; the steady map is the main result. The first picture is a quick sketch, then the exact map replaces it.
             {backend ? ` Running on ${backend.kind === "webgpu" ? "your graphics chip" : "your processor"}.` : ""}
           </p>
         </HelpPanel>
-      )}
-      {panel === "sound" && (
+      )}      {panel === "sound" && (
         <div className="panel">
           <canvas ref={chartRef} className="chart" onClick={onChartClick} />
-          {!response && <div className="small">Measuring the room… red diamonds appear here in a few seconds</div>}
-          <div className="small">What you hear at SEAT for each note (low to high pitch), compared with the loudest. Dips vanish, red diamonds boom. Click a diamond to map it. Yellow line = the note on the map.</div>
+          {!response && <div className="small">Measuring the room... red markers appear here in a few seconds</div>}
+          <div className="small">What you hear at your seat for each note, deep to high, compared with the loudest. Dips are quiet, red markers boom. Click a red marker to map it. Yellow line = the note on the map.</div>
           <label>
-            Frequency <input type="range" min={F_MIN} max={F_MAX} step={0.5} value={freq} onChange={(e) => chooseFreq(+e.target.value)} /> {freq.toFixed(1)} Hz
+            Note (Hz = how deep or high) <input type="range" min={F_MIN} max={F_MAX} step={0.5} value={freq} onChange={(e) => chooseFreq(+e.target.value)} /> {freq.toFixed(1)} Hz
           </label>
           <div className="small">{!response ? "" : relDb >= 3 ? "At your seat this note is louder than most of the room." : relDb <= -3 ? "At your seat this note is quieter than most of the room." : "At your seat this note is about average."}</div>
           <label>
@@ -648,41 +699,41 @@ export default function App() {
             </>
           )}
         </div>
-      )}
-      <div className={`chip hint${hintGone || !hasMap ? " gone" : ""}`}>Click anywhere to ping</div>
-      {toast && <div className="chip toast">{toast}</div>}
+      )}      {toast && <div className="chip toast">{toast}</div>}
       {wipe.show && (
         <WipeBar
           pos={wipe.pos}
+          ring={coachTarget === "bar"}
           onChange={(v) => {
             setWipe({ show: true, pos: v });
-            setDone((d) => ({ ...d, wiped: true }));
+            setStep((s) => (s === 4 ? 5 : s));
           }}
-          onClose={() => setWipe({ show: false, pos: 50 })}
+          onClose={() => {
+            setWipe({ show: false, pos: 50 });
+            setStep((s) => (s === 4 ? 5 : s));
+          }}
         />
       )}
       <div className="chip dock">
         <div className="legend">
-          <strong>
-            Map of one note: {freq.toFixed(1)} Hz
-          </strong>
+          <strong>Map for one deep note ({freq.toFixed(0)} Hz: how deep it is). Change it in Chart &amp; sound.</strong>
           <div className="grad" style={{ background: LEGEND_GRADIENT }} />
           <div className="ticks">
-            <span>Quiet</span>
-            <span>Loud</span>
+            <span>Dark = quiet</span>
+            <span>Bright teal = loud</span>
           </div>
           <div className="key">
             <span>
               <span className="hatch" style={{ background: HATCH_CSS }} />
-              Boom (red stripes)
+              Red ring = boom
             </span>
             <span>
               <span className="swatch" style={{ background: "rgb(235,245,255)" }} />
-              Foam
+              Foam wall
             </span>
             <span>
               <span className="swatch" style={{ background: "rgb(190,120,255)" }} />
-              Corner block
+              Corner foam
             </span>
             <span>
               <span className="swatch" style={{ background: "rgb(42,52,64)" }} />
@@ -691,20 +742,37 @@ export default function App() {
           </div>
         </div>
         <div className="tools">
-          {(["ping", "foam", "chunk", "erase"] as Tool[]).map((t) => (
-            <button key={t} className={tool === t ? "on" : ""} onClick={() => setTool(t)}>
-              {t === "ping" ? "Ping" : t === "erase" ? "Erase trap" : t === "foam" ? "Foam panel (5 cm)" : "Corner block (60 cm)"}
-            </button>
-          ))}
-          <button onClick={() => edit({ ...sceneRef.current, traps: [] })}>Clear traps</button>
-          <button className={panel === "room" ? "on" : ""} onClick={() => setPanel(panel === "room" ? null : "room")}>
-            Room size
+          <button className={`playbtn${playing ? " on" : ""}${ring("play")}`} onClick={togglePlay} disabled={!response}>
+            {playing ? "Stop bass" : "Play bass"}
           </button>
-          <button className={panel === "sound" ? "on" : ""} onClick={() => setPanel(panel === "sound" ? null : "sound")}>
-            Chart &amp; sound
+          <button className={`${tool === "foam" ? "on" : ""}${ring("foam")}`} onClick={() => setTool("foam")}>
+            Add foam
           </button>
-          <button onClick={() => setSketchOpen(true)}>Use my floor plan</button>
+          <button className={tool === "erase" ? "on" : ""} onClick={() => setTool("erase")}>
+            Erase foam
+          </button>
+          <button className={tool === "ping" ? "on" : ""} onClick={() => setTool("ping")}>
+            Send a wave
+          </button>
+          <button className={moreOpen ? "on" : ""} onClick={() => setMoreOpen((v) => !v)} aria-expanded={moreOpen}>
+            More
+          </button>
         </div>
+        {moreOpen && (
+          <div className="tools more">
+            <button className={tool === "chunk" ? "on" : ""} onClick={() => setTool("chunk")}>
+              Add corner foam
+            </button>
+            <button onClick={() => edit({ ...sceneRef.current, traps: [] })}>Clear foam</button>
+            <button className={panel === "room" ? "on" : ""} onClick={() => setPanel(panel === "room" ? null : "room")}>
+              Room size
+            </button>
+            <button className={panel === "sound" ? "on" : ""} onClick={() => setPanel(panel === "sound" ? null : "sound")}>
+              Chart &amp; sound
+            </button>
+            <button onClick={() => setSketchOpen(true)}>Use my floor plan</button>
+          </div>
+        )}
       </div>
       {sketchOpen && backend && (
         <SketchDialog cellMetres={backend.dx} maxCols={Math.floor(MAX_ROOM_M / backend.dx)} maxRows={Math.floor(MAX_ROOM_M / backend.dx)} onApply={applySketch} onClose={() => setSketchOpen(false)} />

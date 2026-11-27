@@ -155,11 +155,11 @@ export function Missions({ items }: { items: Mission[] }) {
 }
 
 /** Before/after slider. `pos` is 0..100 (percent of the width that shows "before"). */
-export function WipeBar({ pos, onChange, onClose }: { pos: number; onChange: (v: number) => void; onClose: () => void }) {
+export function WipeBar({ pos, onChange, onClose, ring }: { pos: number; onChange: (v: number) => void; onClose: () => void; ring?: boolean }) {
   return (
-    <div className="wipebar">
+    <div className={`wipebar${ring ? " ring" : ""}`}>
       <span>Before</span>
-      <input type="range" min={0} max={100} value={pos} onChange={(e) => onChange(+e.target.value)} aria-label="Wipe between before and after" />
+      <input type="range" min={0} max={100} value={pos} onChange={(e) => onChange(+e.target.value)} aria-label="Compare before and after" />
       <span>After</span>
       <button onClick={onClose} aria-label="Hide the comparison">
         Hide
