@@ -6,7 +6,7 @@ import { drawDevice, drawNoSignal, drawOuterWall, drawRoomLabel, drawRouter, dra
 import { findDeadZones, levelOf, levelWord, paintGuess, paintHeatmap, smoothPower, type DeadZones } from "./heatmap";
 import { WALL_MATERIALS, wallMaterial, type WallMaterialId } from "./materials";
 import { HelpPanel, Pinger, SketchDialog, WipeBar, thump, useReducedMotion, type SketchApplied } from "./radar";
-import { BANDS, CELL_M, CPML_CELLS, gridFor, type Band, EXAMPLE_LABELS, buildJob, defaultDevices, defaultScene, referencePower, toDb, type Device, type Scene, type Wall } from "./scene";
+import { BANDS, CELL_M, CPML_CELLS, gridFor, resampleImported, type Band, EXAMPLE_LABELS, buildJob, defaultDevices, defaultScene, referencePower, toDb, type Device, type Scene, type Wall } from "./scene";
 import { pickBackend, startSim, type Backend, type SimHandle } from "./sim";
 
 const CANVAS_PX = 768;
@@ -87,6 +87,8 @@ export default function App() {
   const sceneRef = useRef<Scene | null>(null);
   const backendRef = useRef<Backend | null>(null);
   const bandRef = useRef<Band>("2.4");
+  /** The imported plan as first imported (with the cell and room size then), so a band switch always resamples from it. */
+  const importedOrigRef = useRef<{ imp: NonNullable<Scene["imported"]>; cell: number; room: number } | null>(null);
   const simRef = useRef<SimHandle | null>(null);
   const timerRef = useRef<number | undefined>(undefined);
   const toastTimer = useRef<number | undefined>(undefined);
@@ -135,7 +137,7 @@ export default function App() {
           const ref = referencePower(smooth, built, s.router);
           const db = toDb(smooth, ref);
           dbRef.current = db;
-          const dz = findDeadZones(db, built.n);
+          const dz = findDeadZones(db, built.n, BANDS[bandRef.current].cellM);
           deadRef.current = dz;
           paintHeatmap(heatRef.current!, db, built.n, dz.mask);
           setStale(false);
@@ -459,7 +461,7 @@ export default function App() {
     if (scene) {
       const s: Scene = isExample
         ? defaultScene(newRoom)
-        : { ...scene, router: { x: sc(scene.router.x), y: sc(scene.router.y) }, walls: scene.walls.map((w) => ({ ...w, x1: sc(w.x1), y1: sc(w.y1), x2: sc(w.x2), y2: sc(w.y2) })) };
+        : { ...scene, imported: importedOrigRef.current && scene.imported ? resampleImported(importedOrigRef.current.imp, importedOrigRef.current.cell, BANDS[next].cellM, newRoom / importedOrigRef.current.room, newN) : scene.imported, router: { x: sc(scene.router.x), y: sc(scene.router.y) }, walls: scene.walls.map((w) => ({ ...w, x1: sc(w.x1), y1: sc(w.y1), x2: sc(w.x2), y2: sc(w.y2) })) };
       sceneRef.current = s;
       setScene(s);
     }
@@ -490,8 +492,10 @@ export default function App() {
     photoRef.current = { photo, wM: result.cols * result.metresPerCell, hM: result.rows * result.metresPerCell };
     setPhotoVersion((v) => v + 1);
     setIsExample(false);
+    const imp = { mask: result.solid, cols: result.cols, rows: result.rows };
+    importedOrigRef.current = { imp, cell, room: roomM };
     const m = 0.5;
-    edit({ walls: [], router: { x: Math.min(roomM - m, Math.max(m, scene.router.x)), y: Math.min(roomM - m, Math.max(m, scene.router.y)) }, imported: { mask: result.solid, cols: result.cols, rows: result.rows } });
+    edit({ walls: [], router: { x: Math.min(roomM - m, Math.max(m, scene.router.x)), y: Math.min(roomM - m, Math.max(m, scene.router.y)) }, imported: imp });
     setSketchOpen(false);
     scheduleRun();
   };

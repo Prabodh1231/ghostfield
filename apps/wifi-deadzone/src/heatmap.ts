@@ -68,7 +68,10 @@ export interface DeadZones {
 }
 
 /** One flood-fill pass over the cells at or below DEAD_DB, inside the edge layer. Small and thin patches are dropped. */
-export function findDeadZones(db: Float32Array, n: number): DeadZones {
+export function findDeadZones(db: Float32Array, n: number, cellM = 0.01): DeadZones {
+  // The size limits are in 1.0 cm cells; scale them to the cell size of the band (0.45 cm at 5 GHz).
+  const minCells = MIN_BLOB_CELLS * (0.01 / cellM) ** 2;
+  const minSide = MIN_BLOB_SIDE * (0.01 / cellM);
   const mask = new Uint8Array(n * n);
   const seen = new Uint8Array(n * n);
   const blobs: DeadBlob[] = [];
@@ -107,7 +110,7 @@ export function findDeadZones(db: Float32Array, n: number): DeadZones {
           stack.push(q);
         }
       }
-      if (cells.length >= MIN_BLOB_CELLS && Math.min(maxI - minI, maxJ - minJ) + 1 >= MIN_BLOB_SIDE) {
+      if (cells.length >= minCells && Math.min(maxI - minI, maxJ - minJ) + 1 >= minSide) {
         for (const k of cells) mask[k] = 1;
         blobs.push({ cx: sx / cells.length, cy: sy / cells.length, area: cells.length });
       }

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { runCpuJob } from "@core/runtime/cpuJob";
 import { FREQ_5_HZ, FREQ_HZ, WALL_MATERIALS, ituEpsSigma, materialFor, type WallMaterialId } from "../src/materials";
-import { BANDS, buildJob, cellsPerWavelength, gridFor, type Band, type Scene } from "../src/scene";
+import { BANDS, buildJob, cellsPerWavelength, gridFor, resampleImported, type ImportedWalls, type Band, type Scene } from "../src/scene";
 import { C0 } from "../src/materials";
+import { findDeadZones } from "../src/heatmap";
 
 describe("5 GHz materials", () => {
   it("every ITU row is valid at 5.5 GHz and at 2.4 GHz", () => {
@@ -76,4 +77,57 @@ describe("5 GHz is blocked more than 2.4 GHz", () => {
       expect(hi).toBeLessThan(lo);
     }
   }, 300000);
+});
+describe("imported floor plan on a band switch", () => {
+  // A 100 x 60 cell plan (1.0 m x 0.6 m at 1 cm) with a wall column at x = 50 and a full top row.
+  const cols = 100;
+  const rows = 60;
+  const mask = new Uint8Array(cols * rows);
+  for (let j = 0; j < rows; j++) mask[j * cols + 50] = 1;
+  for (let i = 0; i < cols; i++) mask[i] = 1;
+  const orig: ImportedWalls = { mask, cols, rows };
+  const metres = (m: ImportedWalls, cell: number) => ({ w: m.cols * cell, h: m.rows * cell });
+
+  it("GPU: same room size, so the walls cover the same metres on the finer grid", () => {
+    const five = resampleImported(orig, BANDS["2.4"].cellM, BANDS["5"].cellM, 1, 1704);
+    expect(Math.abs(metres(five, BANDS["5"].cellM).w - 1.0)).toBeLessThan(BANDS["5"].cellM);
+    expect(Math.abs(metres(five, BANDS["5"].cellM).h - 0.6)).toBeLessThan(BANDS["5"].cellM);
+    // the wall column stays at x = 0.5 m
+    const col = [...Array(five.cols).keys()].filter((i) => five.mask[five.cols * 30 + i]);
+    expect(Math.abs(col[0]! * BANDS["5"].cellM - 0.5)).toBeLessThan(0.01);
+    // back to 2.4 GHz from the original gives the same mask
+    expect(resampleImported(orig, BANDS["2.4"].cellM, BANDS["2.4"].cellM, 1, 768)).toBe(orig);
+  });
+
+  it("CPU: the whole flat shrinks by 0.45, so the same cells cover 0.45x the metres", () => {
+    const r = BANDS["5"].cellM / BANDS["2.4"].cellM;
+    const five = resampleImported(orig, BANDS["2.4"].cellM, BANDS["5"].cellM, r, 384);
+    expect(five.cols).toBe(cols);
+    expect(Array.from(five.mask)).toEqual(Array.from(mask));
+  });
+
+  it("is clipped to the grid", () => {
+    expect(resampleImported(orig, 0.01, 0.0045, 1, 150).cols).toBe(150);
+  });
+});
+
+describe("5 GHz job shape", () => {
+  it("builds a 1704 x 1704 job with 5.5 GHz source and 0.45 cm cells, no solve", () => {
+    const b = buildJob({ router: { x: 1, y: 1 }, walls: [{ x1: 2, y1: 1, x2: 2, y2: 3, material: "brick" }] }, 1704, { band: "5" });
+    expect(b.n).toBe(1704);
+    expect(b.dx).toBe(0.0045);
+    expect(b.matIdx.length).toBe(1704 * 1704);
+    expect(b.job.sources[0]!.freq).toBe(FREQ_5_HZ);
+    expect(b.matIdx.some((v) => v > 0)).toBe(true);
+  });
+});
+
+describe("dead-zone size limits follow the cell size", () => {
+  it("a 25 x 25 cell patch is kept at 1 cm but dropped at 0.45 cm (same 7 cm patch is a speck)", () => {
+    const n = 200;
+    const db = new Float32Array(n * n).fill(0);
+    for (let j = 80; j < 105; j++) for (let i = 80; i < 105; i++) db[j * n + i] = -50;
+    expect(findDeadZones(db, n, 0.01).blobs.length).toBe(1);
+    expect(findDeadZones(db, n, 0.0045).blobs.length).toBe(0);
+  });
 });

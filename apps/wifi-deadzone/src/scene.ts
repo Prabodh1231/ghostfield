@@ -24,6 +24,24 @@ export function gridFor(kind: "webgpu" | "cpu", n24: number, band: Band): number
   if (band === "5" && kind === "webgpu") return Math.round((n24 * CELL_M) / BANDS["5"].cellM / 8) * 8;
   return n24;
 }
+/**
+ * Resample an imported wall mask (nearest neighbour) when the cell size or room size changes. The plan covers
+ * cols * cellOld * roomRatio metres afterwards (roomRatio = newRoom / oldRoom: 1 on the GPU, 0.45 on the CPU, where
+ * the whole flat shrinks). Clipped to maxN cells. Always resample from the original mask, so switching back gives it again.
+ */
+export function resampleImported(imp: ImportedWalls, oldCell: number, newCell: number, roomRatio: number, maxN: number): ImportedWalls {
+  const k = (oldCell * roomRatio) / newCell; // new cells per old cell
+  if (k === 1) return imp;
+  const cols = Math.min(maxN, Math.max(1, Math.round(imp.cols * k)));
+  const rows = Math.min(maxN, Math.max(1, Math.round(imp.rows * k)));
+  const mask = new Uint8Array(cols * rows);
+  for (let j = 0; j < rows; j++) {
+    const sj = Math.min(imp.rows - 1, Math.floor(j / k));
+    for (let i = 0; i < cols; i++) mask[j * cols + i] = imp.mask[sj * imp.cols + Math.min(imp.cols - 1, Math.floor(i / k))]!;
+  }
+  return { mask, cols, rows };
+}
+
 export function cellsPerWavelength(band: Band): number {
   return C0 / BANDS[band].freqHz / BANDS[band].cellM;
 }
