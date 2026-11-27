@@ -43,6 +43,8 @@ export interface Scene {
   traps: Trap[];
   sub: Pt;
   seat: Pt;
+  /** Walls found in a photo of a paper plan (@ui importSketch), made at cell size dx. 1 = solid. Top-left of the room. */
+  imported?: { mask: Uint8Array; cols: number; rows: number; dx: number };
 }
 
 export function defaultScene(): Scene {
@@ -90,6 +92,11 @@ export function buildRoom(scene: Scene, dx: number, rfOf: TrapRf = DEFAULT_RF): 
     const a = Math.min(nx - 2, Math.round(scene.notchW / dx));
     const b = Math.min(ny - 2, Math.round(scene.notchH / dx));
     for (let j = 0; j < b; j++) for (let i = nx - a; i < nx; i++) solid[j * nx + i] = 1;
+  }
+  const imp = scene.imported;
+  // Only use the imported walls when they were made at this grid's cell size (the CPU and GPU grids differ).
+  if (imp && Math.abs(imp.dx - dx) < 1e-9) {
+    for (let j = 0; j < Math.min(imp.rows, ny); j++) for (let i = 0; i < Math.min(imp.cols, nx); i++) if (imp.mask[j * imp.cols + i]) solid[j * nx + i] = 1;
   }
   const rf = new Float32Array(nx * ny);
   const put = (i: number, j: number, v: number) => {
