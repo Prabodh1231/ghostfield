@@ -7,7 +7,7 @@ import { importSketch, SketchError, thump } from "@ui";
 import { airMaterial, CPU_PROFILE, GPU_PROFILE, type Profile } from "./config";
 import { LEVELS, rasterize, type LevelData } from "./levels";
 import { PX, Renderer, VIEW_H, VIEW_W } from "./render";
-import { sketchToLevel } from "./sketchLevel";
+import { metresProblem, sketchToLevel } from "./sketchLevel";
 import { World, type GameEvent, type Input } from "./world";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -232,7 +232,10 @@ $("sketchBtn").onclick = () => show("sketch");
 $("sketchBack").onclick = () => show("start");
 $<HTMLInputElement>("file").onchange = async (ev) => {
   const f = (ev.target as HTMLInputElement).files?.[0];
-  if (!f) return;
+  if (!f) {
+    skMsg("Pick a picture file first.");
+    return;
+  }
   try {
     const bmp = await createImageBitmap(f);
     const k = Math.min(1, 1024 / Math.max(bmp.width, bmp.height));
@@ -261,6 +264,11 @@ skCv.addEventListener("click", (e) => {
 });
 $("sketchGo").onclick = () => {
   if (!skImg || skPts.length < 2) return;
+  const bad = metresProblem($<HTMLInputElement>("metres").value);
+  if (bad) {
+    skMsg(bad);
+    return;
+  }
   try {
     const metres = Number($<HTMLInputElement>("metres").value);
     const img = skImg.getContext("2d")!.getImageData(0, 0, skImg.width, skImg.height);

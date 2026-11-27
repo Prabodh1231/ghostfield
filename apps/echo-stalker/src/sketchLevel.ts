@@ -87,3 +87,9 @@ export function sketchToLevel(solidIn: Uint8Array, cols: number, rows: number, p
     monsters: [{ x: at(mon)[0], y: at(mon)[1], wander: 1.1, hunt: 2.2 }],
   };
 }
+
+/** Plain message when the typed real distance cannot be used, else null. */
+export function metresProblem(raw: string): string | null {
+  const m = Number(raw);
+  return raw.trim() !== "" && Number.isFinite(m) && m > 0 ? null : "Type the real distance between your two dots, in metres.";
+}

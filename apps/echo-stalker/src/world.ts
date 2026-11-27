@@ -241,7 +241,8 @@ export class World {
     }
   }
 
-  private pickTarget(m: Monster) {
+  /** @internal exposed for tests */
+  pickTarget(m: Monster) {
     for (let tries = 0; tries < 20; tries++) {
       const a = this.rand() * 2 * Math.PI;
       const r = 2 + this.rand() * 5;
@@ -253,7 +254,21 @@ export class World {
         return;
       }
     }
+    // All tries hit walls (tight spot): go to the nearest open cell at least 1 m away so it keeps moving.
+    let best = Infinity;
     m.tx = m.x;
     m.ty = m.y;
+    for (let iy = 0; iy < this.ny; iy++) {
+      for (let ix = 0; ix < this.nx; ix++) {
+        const x = (ix + 0.5) * this.dx;
+        const y = (iy + 0.5) * this.dx;
+        const d = Math.hypot(x - m.x, y - m.y);
+        if (d >= 1 && d < best && !this.blocked(x, y, MONSTER_R)) {
+          best = d;
+          m.tx = x;
+          m.ty = y;
+        }
+      }
+    }
   }
 }
