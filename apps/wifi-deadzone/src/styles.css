@@ -89,3 +89,38 @@ progress { width: min(60vw, 320px); height: 8px; accent-color: var(--teal); }
 .map.stale canvas.plan { opacity: 0.5; }
 .map.pinging canvas.plan { opacity: 0.35; }
 .map canvas.plan { transition: opacity 0.2s; }
+
+/* round 10: plan-first look, coach banner, legend, phone layout */
+.wait { inset: auto; top: 56px; left: 10px; align-items: stretch; justify-content: flex-start; gap: 6px; padding: 8px 12px; max-width: calc(100vw - 20px); box-sizing: border-box; font-size: 13px; text-align: left; background: var(--chip); border: 1px solid var(--edge); border-radius: 12px; }
+.wait progress { width: 100%; }
+.title h1 .short { display: none; }
+.coach { position: fixed; top: 8px; left: 0; right: 0; margin: 0 auto; width: min(520px, calc(100vw - 780px)); min-width: 300px; z-index: 5; padding: 8px 14px; box-sizing: border-box; }
+.coach-top { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--teal); }
+.coach-text { font-size: 17px; line-height: 1.3; margin-top: 2px; color: #fff; }
+button.link { background: none; border: none; color: #9fb7b3; text-decoration: underline; padding: 0 2px; font-size: 12px; }
+.ring { position: absolute; width: 64px; height: 64px; margin: -32px 0 0 -32px; border: 3px solid var(--teal); border-radius: 50%; pointer-events: none; box-shadow: 0 0 0 2px rgba(5, 7, 11, 0.7); z-index: 2; }
+.ring.pulse { animation: ringpulse 1.4s ease-in-out infinite; }
+@keyframes ringpulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: 0.55; } }
+body[data-coach="2"] .wipebar, body[data-coach="4"] .tools .b-draw { outline: 3px solid var(--teal); outline-offset: 2px; }
+body[data-wait="1"][data-coach="2"] .wipebar, body[data-wait="1"][data-coach="4"] .tools .b-draw { animation: ringpulse 1.4s ease-in-out infinite; }
+.legend .levels { display: flex; flex-wrap: wrap; gap: 4px 12px; font-weight: 600; }
+.legend .levels span { display: inline-flex; align-items: center; gap: 4px; }
+.tools .morebtn { display: none; }
+.tools .extra { display: contents; }
+@media (max-width: 1100px) { .coach { top: 56px; width: min(92vw, 520px); } }
+@media (max-width: 640px) {
+  .stage { padding-top: 44px; box-sizing: border-box; }
+  .title { padding: 4px 10px; }
+  .title h1 .long { display: none; }
+  .title h1 .short { display: inline; }
+  .title a { margin-right: 8px; }
+  .title h1 { display: inline; font-size: 14px; }
+  .wait { top: 50px; }
+  .coach { top: calc(44px + 100vw + 6px); left: 10px; right: 10px; width: auto; min-width: 0; margin: 0; }
+  .coach-text { font-size: 16px; }
+  .tools .morebtn { display: inline-block; }
+  .tools .extra { display: none; }
+  .tools.open .extra { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; width: 100%; }
+  .toast { top: auto; bottom: 150px; }
+  .legend { min-width: 0; font-size: 12px; }
+}

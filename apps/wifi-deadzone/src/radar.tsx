@@ -159,7 +159,7 @@ export function WipeBar({ pos, onChange, onClose }: { pos: number; onChange: (v:
   return (
     <div className="wipebar">
       <span>Before</span>
-      <input type="range" min={0} max={100} value={pos} onChange={(e) => onChange(+e.target.value)} aria-label="Wipe between before and after" />
+      <input type="range" min={0} max={100} value={pos} onChange={(e) => onChange(+e.target.value)} aria-label="Compare before and after" />
       <span>After</span>
       <button onClick={onClose} aria-label="Hide the comparison">
         Hide

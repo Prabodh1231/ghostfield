@@ -159,3 +159,28 @@ export function defaultScene(roomM: number): Scene {
     ],
   };
 }
+
+/** Room names for the example flat, in fractions of the room side (text centre). Shown only while the plan is the example flat. */
+export const EXAMPLE_LABELS: readonly { text: string; fx: number; fy: number }[] = [
+  { text: "Living room", fx: 0.21, fy: 0.12 },
+  { text: "Hall", fx: 0.535, fy: 0.05 },
+  { text: "Bedroom", fx: 0.78, fy: 0.12 },
+  { text: "Study", fx: 0.78, fy: 0.92 },
+];
+
+export type DeviceKind = "tv" | "phone" | "laptop";
+export interface Device {
+  kind: DeviceKind;
+  /** Metres. Devices are visual only: the solver does not see them. */
+  x: number;
+  y: number;
+}
+/** Start spots in fractions of the room side. On the example flat the laptop sits in the red zone. */
+export const DEFAULT_DEVICES: readonly { kind: DeviceKind; fx: number; fy: number }[] = [
+  { kind: "tv", fx: 0.12, fy: 0.2 },
+  { kind: "phone", fx: 0.53, fy: 0.5 },
+  { kind: "laptop", fx: 0.9, fy: 0.86 },
+];
+export function defaultDevices(roomM: number): Device[] {
+  return DEFAULT_DEVICES.map((d) => ({ kind: d.kind, x: d.fx * roomM, y: d.fy * roomM }));
+}
