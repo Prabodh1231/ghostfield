@@ -65,14 +65,14 @@ describe("monster gradient step", () => {
 
 describe("headless game (CPU profile, level 1)", () => {
   const p = CPU_PROFILE;
-  const make = () => {
+  const make = (r?: () => number) => {
     const dt = dtFromCourant(DEFAULT_COURANT, p.dx, C0);
     const lvl = rasterize(LEVELS[0]!, p);
     const cs = buildCoefficients(p.nx, p.ny, p.dx, dt, () => airMaterial(p));
     const sim = createLiveSim({ cs, backend: "cpu", solid: lvl.solid, pulseHz: p.pulseHz });
     let seed = 7;
     const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    return new World(sim, p, lvl, rand);
+    return new World(sim, p, lvl, r ?? rand);
   };
 
   it("a clap lights up walls and the monster walks toward it", () => {
@@ -93,6 +93,14 @@ describe("headless game (CPU profile, level 1)", () => {
     expect(d1).toBeLessThan(d0 - 1);
   }, 60000);
 
+  it("picks a reachable open spot when every random try is blocked", () => {
+    const w = make(() => 0);
+    const m = w.monsters[0]!;
+    m.x = w.nx * w.dx - 1; // rand() = 0 aims 2 m to the right, outside the map: every try is blocked
+    w.pickTarget(m);
+    expect(Math.hypot(m.tx - m.x, m.ty - m.y)).toBeGreaterThanOrEqual(1);
+    expect(w.blocked(m.tx, m.ty, 0.25)).toBe(false);
+  });
   it("keeps moving when nothing is heard", () => {
     const w = make();
     const m = w.monsters[0]!;
@@ -123,5 +131,13 @@ describe("sketch to level", () => {
       expect(p[1]).toBeGreaterThan(0.9);
     }
     expect(Math.hypot(lvl.exit[0] - lvl.start[0], lvl.exit[1] - lvl.start[1])).toBeGreaterThan(4);
+  });
+});
+
+describe("sketch distance check", () => {
+  it("rejects blank, zero, negative and non-number distances with a plain message", async () => {
+    const { metresProblem } = await import("../src/sketchLevel");
+    for (const bad of ["", "  ", "0", "-3", "abc"]) expect(metresProblem(bad)).toMatch(/real distance/);
+    expect(metresProblem("12.5")).toBeNull();
   });
 });

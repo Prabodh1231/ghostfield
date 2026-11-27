@@ -30,6 +30,11 @@ export function stackLevels(freqs: ArrayLike<number>, db: ArrayLike<number>, f: 
 
 export type PlayMode = "laptop" | "tone";
 
+/** Gain of harmonic i (0-based): laptop uses the room levels; tone is the fundamental alone. */
+export function modeGain(mode: PlayMode, i: number, levels: number[]): number {
+  return mode === "laptop" ? levels[i]! : i === 0 ? 0.5 : 0;
+}
+
 /**
  * Web Audio player. Safe by design: master volume starts at 5% and the slider tops out at 40%,
  * everything goes through a hard compressor used as a limiter, and start/stop fade over 0.2 s / 0.1 s.
@@ -59,12 +64,12 @@ export class BassPlayer {
     const n = mode === "laptop" ? HARMONICS : 1;
     this.oscs = [];
     this.gains = [];
-    for (let k = 1; k <= n; k++) {
+    for (let k = 1; k <= HARMONICS; k++) {
       const o = ctx.createOscillator();
       o.type = "sine";
       o.frequency.value = Math.min(MAX_HZ, k * f);
       const g = ctx.createGain();
-      g.gain.value = mode === "laptop" ? levels[k - 1]! : 0.5;
+      g.gain.value = modeGain(mode, k - 1, levels);
       o.connect(g).connect(this.master);
       o.start();
       this.oscs.push(o);
@@ -79,7 +84,7 @@ export class BassPlayer {
     if (!this.ctx || !this.playing) return;
     const t = this.ctx.currentTime;
     this.oscs.forEach((o, i) => o.frequency.setTargetAtTime(Math.min(MAX_HZ, (i + 1) * f), t, 0.03));
-    if (mode === "laptop") this.gains.forEach((g, i) => g.gain.setTargetAtTime(levels[i]!, t, 0.05));
+    this.gains.forEach((g, i) => g.gain.setTargetAtTime(modeGain(mode, i, levels), t, 0.05));
   }
 
   setVolume(v: number): void {
