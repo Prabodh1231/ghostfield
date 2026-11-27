@@ -1,10 +1,10 @@
-import { DEFAULT_COURANT, buildCoefficients, dtFromCourant, type Material } from "@core/coefficients";
+import { DEFAULT_COURANT, buildCoefficients, dtFromCourant } from "@core/coefficients";
 import type { FieldJob } from "@core/runtime/cpuJob";
 import type { ResponseJob } from "@core/runtime/responseJob";
 import { makePlan } from "@core/runtime/sineSource";
+import { C0, RHO0, gammaQ, makeMaterialAt } from "@core/live/acoustics";
 
-export const RHO0 = 1.2; // kg/m^3
-export const C0 = 343; // m/s
+export { C0, RHO0, gammaQ, makeMaterialAt };
 export const F_MIN = 20;
 export const F_MAX = 300;
 /** Grid cell on WebGPU. The CPU fallback uses 5 cm cells (half the cells per side), same room size. */
@@ -20,8 +20,6 @@ export const TRAPS = {
 export type TrapType = keyof typeof TRAPS;
 export type TrapRf = Record<TrapType, number>;
 export const DEFAULT_RF: TrapRf = { foam: TRAPS.foam.rf, chunk: TRAPS.chunk.rf };
-
-export const gammaQ = (rf: number, rhoEff = RHO0): number => rf / rhoEff;
 
 export interface Pt {
   x: number;
@@ -149,11 +147,6 @@ export function isAir(room: Room, x: number, y: number): boolean {
   const i = Math.floor(x / room.dx);
   const j = Math.floor(y / room.dx);
   return i >= 0 && j >= 0 && i < room.nx && j < room.ny && !room.solid[j * room.nx + i];
-}
-
-export function makeMaterialAt(room: Room): (ix: number, iy: number) => Material {
-  const C = 1 / (RHO0 * C0 * C0);
-  return (ix, iy) => ({ C, L: RHO0, gammaU: 0, gammaQ: gammaQ(room.rf[iy * room.nx + ix]!) });
 }
 
 export function buildResponseJob(scene: Scene, dx: number, seconds: number, rfOf: TrapRf = DEFAULT_RF): { room: Room; job: ResponseJob } {
