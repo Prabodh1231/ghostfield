@@ -73,3 +73,13 @@ GPU limits: default limits only, max 8 storage buffers per stage. `MAX_SOURCES =
 
 ## Tests
 From `packages/ghostfield-core`: `pnpm test` (vitest). It is heavy. Run one file when possible, for example `pnpm vitest run tests/test6-cfl-etd.test.ts`. Tests 1-5 cover energy, reciprocity, mirror, spreading and CPML reflection. Test 6 covers the CFL guard and ETD. Test 7 covers room modes.
+
+## Live mode (round 7)
+For a click-to-ping wave or a game, use `createLiveSim` from `packages/ghostfield-core/src/live/`:
+`createLiveSim({ cs, solid?, backend: "cpu" | "gpu", device?, pulseHz = 400, readbackEvery = 1 })` returns `advance(n)`, `field()`, `addPulse(x, y, amp)`, `setSolid`, `setMaterial`, `reset`, `destroy`.
+- `advance` never blocks. On GPU, `field()` is the last finished copy and lags 1 to 3 frames.
+- At most 8 pulses (`MAX_PULSES`). The oldest is dropped.
+- `setMaterial` throws if a cell is faster than `cs.cMax`.
+- It has no absorbing edge, so waves bounce off the edge. Echo Stalker adds a small air loss so echoes die.
+- Real time at 60 fps needs about 206 steps per frame at dx = 4 cm. The apps run slower than real time on purpose (game: 0.2x on GPU).
+Reference app: `apps/echo-stalker`. Shared look and `importSketch` (floor-plan picture to walls): `packages/ghostfield-ui`.
