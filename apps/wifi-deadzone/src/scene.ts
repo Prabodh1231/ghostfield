@@ -9,14 +9,21 @@ export const CELL_M = 0.01;
 export type Band = "2.4" | "5";
 /**
  * Per band: Wi-Fi centre frequency and cell size. 5 GHz (centre 5.5 GHz, wavelength 5.45 cm) needs cells of
- * 0.454 cm or less for 12 cells per wavelength, so it uses 0.45 cm (12.1 cells). The grid stays the same size,
- * so a map costs the same as at 2.4 GHz and the room is 0.45 times as wide. shortcut: a smaller room at 5 GHz
- * instead of a bigger grid (8x the work); upgrade when a 1536-cell grid is fast enough.
+ * 0.454 cm or less for 12 cells per wavelength, so it uses 0.45 cm (12.1 cells). On the CPU the grid stays the same
+ * size, so the room is 0.45 times as wide (shortcut: a CPU map for the full room would take minutes). See gridFor.
  */
 export const BANDS: Record<Band, { freqHz: number; cellM: number }> = {
   "2.4": { freqHz: FREQ_HZ, cellM: CELL_M },
   "5": { freqHz: FREQ_5_HZ, cellM: 0.0045 },
 };
+/**
+ * Grid side for a band. On the GPU 5 GHz keeps the 2.4 GHz room size (7.7 m): 7.68 m / 0.45 cm = 1707 cells,
+ * rounded to a multiple of 8 (1704). The CPU fallback keeps the same grid as 2.4 GHz, so its 5 GHz room is smaller.
+ */
+export function gridFor(kind: "webgpu" | "cpu", n24: number, band: Band): number {
+  if (band === "5" && kind === "webgpu") return Math.round((n24 * CELL_M) / BANDS["5"].cellM / 8) * 8;
+  return n24;
+}
 export function cellsPerWavelength(band: Band): number {
   return C0 / BANDS[band].freqHz / BANDS[band].cellM;
 }

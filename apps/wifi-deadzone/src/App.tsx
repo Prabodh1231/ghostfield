@@ -6,7 +6,7 @@ import { drawDevice, drawNoSignal, drawOuterWall, drawRoomLabel, drawRouter, dra
 import { findDeadZones, levelOf, levelWord, paintGuess, paintHeatmap, smoothPower, type DeadZones } from "./heatmap";
 import { WALL_MATERIALS, wallMaterial, type WallMaterialId } from "./materials";
 import { HelpPanel, Pinger, SketchDialog, WipeBar, thump, useReducedMotion, type SketchApplied } from "./radar";
-import { BANDS, CELL_M, CPML_CELLS, type Band, EXAMPLE_LABELS, buildJob, defaultDevices, defaultScene, referencePower, toDb, type Device, type Scene, type Wall } from "./scene";
+import { BANDS, CELL_M, CPML_CELLS, gridFor, type Band, EXAMPLE_LABELS, buildJob, defaultDevices, defaultScene, referencePower, toDb, type Device, type Scene, type Wall } from "./scene";
 import { pickBackend, startSim, type Backend, type SimHandle } from "./sim";
 
 const CANVAS_PX = 768;
@@ -61,6 +61,7 @@ export default function App() {
   const [draft, setDraft] = useState<Wall | null>(null);
   const [status, setStatus] = useState<Status>({ text: "Starting up…", fraction: null });
   const [band, setBand] = useState<Band>("2.4");
+  const [mapSecs5, setMapSecs5] = useState<number | null>(null);
   const [stale, setStale] = useState(false);
   const [hasMap, setHasMap] = useState(false);
   const [mapVersion, setMapVersion] = useState(0);
@@ -102,7 +103,8 @@ export default function App() {
 
   /** Cell size of the chosen band, in metres. */
   const cell = BANDS[band].cellM;
-  const roomM = backend ? backend.n * cell : PROVISIONAL_M;
+  const gridN = backend ? gridFor(backend.kind, backend.n, band) : 0;
+  const roomM = backend ? gridN * cell : PROVISIONAL_M;
   /** Icon and text scale: 1 on a big screen, about 2 on a phone, so the pictures stay readable. */
   const u = Math.max(1, CANVAS_PX / cssW);
 
@@ -119,7 +121,7 @@ export default function App() {
     simRef.current?.cancel();
     const t0 = performance.now();
     try {
-      const built = buildJob(s, b.n, { band: bandRef.current });
+      const built = buildJob(s, gridFor(b.kind, b.n, bandRef.current), { band: bandRef.current });
       setStatus({ text: "Starting…", fraction: 0 });
       const sim = startSim(b, built.job, (fraction, phase) =>
         setStatus({ text: phase === "settle" ? "Letting the waves spread…" : "Averaging the signal…", fraction }),
@@ -144,6 +146,7 @@ export default function App() {
             frozenRef.current = false;
             setWipe({ show: true, pos: 50 });
           }
+          if (bandRef.current === "5") setMapSecs5(Math.max(1, Math.round((performance.now() - t0) / 1000)));
           setStatus({ text: `Last map: ${r.steps} steps in ${((performance.now() - t0) / 1000).toFixed(1)} s`, fraction: null });
         })
         .catch((e) => setStatus({ text: `Simulation failed: ${String(e)}`, fraction: null, error: true }));
@@ -157,6 +160,17 @@ export default function App() {
     if (heatRef.current) paintGuess(heatRef.current, 0.2, 0.5);
   }, []);
 
+  /** A wave player sized for a grid of n cells (a wave crosses the room about 1.6 times). */
+  const makePinger = (b: Backend, n: number) => {
+    pingerRef.current?.cancel();
+    pingerRef.current?.host.remove();
+    const p = new Pinger(b.kind === "webgpu" ? SPF_GPU : SPF_CPU, Math.round((1.6 * n) / COURANT));
+    p.onActive = setPinging;
+    pingerRef.current = p;
+    const m = mapRef.current;
+    if (m) m.insertBefore(p.host, overlayRef.current);
+  };
+
   useEffect(() => {
     pickBackend().then((b) => {
       backendRef.current = b;
@@ -165,12 +179,7 @@ export default function App() {
       sceneRef.current = s;
       setScene(s);
       setDevices(defaultDevices(b.n * CELL_M));
-      const crossing = b.n / COURANT;
-      const p = new Pinger(b.kind === "webgpu" ? SPF_GPU : SPF_CPU, Math.round(1.6 * crossing));
-      p.onActive = setPinging;
-      pingerRef.current = p;
-      const m = mapRef.current;
-      if (m) m.insertBefore(p.host, overlayRef.current);
+      makePinger(b, b.n);
       run();
     });
     return () => {
@@ -240,13 +249,13 @@ export default function App() {
   /** Signal level at a spot (smoothed map), or null while there is no fresh map. */
   const levelAt = useCallback(
     (x: number, y: number): 0 | 1 | 2 | 3 | null => {
-      const n = backend?.n;
+      const n = gridN;
       if (!n || !dbRef.current || !hasMap || stale) return null;
       const i = Math.min(n - 1, Math.max(0, Math.floor(x / cell)));
       const j = Math.min(n - 1, Math.max(0, Math.floor(y / cell)));
       return levelOf(dbRef.current[j * n + i]!);
     },
-    [backend, hasMap, stale, cell],
+    [backend, hasMap, stale, cell, gridN],
   );
 
   // Floor plan overlay: outer wall, imported walls, walls, room names, no-signal tags, router, devices. Drawn from the first frame.
@@ -298,7 +307,7 @@ export default function App() {
   const grabM = Math.max(Math.min(GRAB_M, roomM * 0.05), (26 / cssW) * roomM);
 
   const cellAt = (p: { x: number; y: number }): number => {
-    const n = backend?.n;
+    const n = gridN;
     if (!n) return -1;
     const i = Math.floor(p.x / cell);
     const j = Math.floor(p.y / cell);
@@ -326,7 +335,7 @@ export default function App() {
     }
     try {
       if (!liveRef.current) {
-        const built = buildJob(sceneRef.current, b.n, { band: bandRef.current });
+        const built = buildJob(sceneRef.current, gridFor(b.kind, b.n, bandRef.current), { band: bandRef.current });
         const sim = createLiveSim({ cs: built.job.cs, backend: b.kind === "webgpu" ? "gpu" : "cpu", device: b.kind === "webgpu" ? b.device : undefined, pulseHz: BANDS[bandRef.current].freqHz });
         liveRef.current = sim;
         pg.attach(sim);
@@ -431,13 +440,18 @@ export default function App() {
   /** Switch Wi-Fi band. The room shrinks at 5 GHz (finer cells, same grid), so everything is rescaled to keep its place. */
   const changeBand = (next: Band) => {
     if (!backend || next === band) return;
-    const newRoom = backend.n * BANDS[next].cellM;
+    const newN = gridFor(backend.kind, backend.n, next);
+    const newRoom = newN * BANDS[next].cellM;
     const ratio = newRoom / roomM;
     const sc = (v: number) => Math.round(v * ratio * 1000) / 1000;
-    pingerRef.current?.cancel();
+    makePinger(backend, newN);
     liveRef.current?.destroy();
     liveRef.current = null;
     bandRef.current = next;
+    // a quick picture while the real map is worked out
+    if (heatRef.current) paintGuess(heatRef.current, 0.2, 0.5);
+    dbRef.current = null;
+    deadRef.current = null;
     setBand(next);
     setDevices((ds) => ds.map((d) => ({ ...d, x: d.x * ratio, y: d.y * ratio })));
     if (photoRef.current) photoRef.current = { photo: photoRef.current.photo, wM: photoRef.current.wM * ratio, hM: photoRef.current.hM * ratio };
@@ -502,7 +516,7 @@ export default function App() {
 
   // Where the map ring goes for the current step, as fractions of the map side.
   let ring: { fx: number; fy: number } | null = null;
-  if (scene && step === 0 && hasMap && deadRef.current?.blobs[0] && backend) ring = { fx: deadRef.current.blobs[0].cx / backend.n, fy: deadRef.current.blobs[0].cy / backend.n };
+  if (scene && step === 0 && hasMap && deadRef.current?.blobs[0] && backend) ring = { fx: deadRef.current.blobs[0].cx / gridN, fy: deadRef.current.blobs[0].cy / gridN };
   else if (scene && step === 0 && hasMap && devices[2]) ring = { fx: devices[2].x / roomM, fy: devices[2].y / roomM };
   else if (scene && step === 1) ring = { fx: scene.router.x / roomM, fy: scene.router.y / roomM };
   else if (step === 3) ring = { fx: 0.5, fy: 0.5 };
@@ -595,7 +609,8 @@ export default function App() {
               5 GHz (faster, shorter reach)
             </button>
           </div>
-          {band === "5" && <div className="bandnote">5 GHz shows a smaller room ({roomM.toFixed(1)} m wide) so the map still comes quickly.</div>}
+          {band === "5" && backend?.kind === "cpu" && <div className="bandnote">5 GHz shows a smaller room ({roomM.toFixed(1)} m wide) so the map still comes quickly.</div>}
+          {band === "5" && backend?.kind === "webgpu" && <div className="bandnote">5 GHz map takes about {mapSecs5 ?? 10} seconds{stale || status.fraction !== null ? " (working on it)" : ""}.</div>}
           <div className="key">
             <span>Brighter teal means stronger Wi-Fi.</span>
             {cursorWord && <span>Here: {cursorWord}</span>}
@@ -629,7 +644,7 @@ export default function App() {
         </div>
       </div>
       {sketchOpen && backend && (
-        <SketchDialog cellMetres={cell} maxCols={backend.n} maxRows={backend.n} onApply={applySketch} onClose={() => setSketchOpen(false)} />
+        <SketchDialog cellMetres={cell} maxCols={gridN} maxRows={gridN} onApply={applySketch} onClose={() => setSketchOpen(false)} />
       )}
     </>
   );

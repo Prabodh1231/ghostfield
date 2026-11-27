@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { runCpuJob } from "@core/runtime/cpuJob";
 import { FREQ_5_HZ, FREQ_HZ, WALL_MATERIALS, ituEpsSigma, materialFor, type WallMaterialId } from "../src/materials";
-import { BANDS, buildJob, cellsPerWavelength, type Band, type Scene } from "../src/scene";
+import { BANDS, buildJob, cellsPerWavelength, gridFor, type Band, type Scene } from "../src/scene";
 import { C0 } from "../src/materials";
 
 describe("5 GHz materials", () => {
@@ -34,6 +34,16 @@ describe("5 GHz materials", () => {
     expect(cellsPerWavelength("2.4")).toBeGreaterThanOrEqual(12);
     expect(BANDS["5"].cellM).toBeLessThan(BANDS["2.4"].cellM);
     expect(C0 / FREQ_5_HZ / BANDS["5"].cellM).toBeGreaterThanOrEqual(12);
+  });
+});
+
+describe("5 GHz grid", () => {
+  it("on the GPU 5 GHz keeps the 7.68 m room; the CPU keeps the grid", () => {
+    const n = gridFor("webgpu", 768, "5");
+    expect(Math.abs(n * BANDS["5"].cellM - 7.68)).toBeLessThan(0.05);
+    expect(n).toBeLessThan(2048);
+    expect(gridFor("webgpu", 768, "2.4")).toBe(768);
+    expect(gridFor("cpu", 384, "5")).toBe(384);
   });
 });
 
