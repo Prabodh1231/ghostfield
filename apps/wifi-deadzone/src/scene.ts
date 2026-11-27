@@ -1,10 +1,25 @@
 import { buildCoefficients, DEFAULT_COURANT, type Material } from "@core/coefficients";
 import type { FieldJob } from "@core/runtime/cpuJob";
 import { makePlan } from "@core/runtime/sineSource";
-import { AIR, C0, FREQ_HZ, materialFor, wallMaterial, type WallMaterialId } from "./materials";
+import { AIR, C0, FREQ_5_HZ, FREQ_HZ, materialFor, wallMaterial, type WallMaterialId } from "./materials";
 
-/** Cell size, 1.0 cm, on every backend (12.5 cells per 2.4 GHz wavelength in air). */
+/** Cell size at 2.4 GHz, 1.0 cm, on every backend (12.5 cells per wavelength in air). */
 export const CELL_M = 0.01;
+
+export type Band = "2.4" | "5";
+/**
+ * Per band: Wi-Fi centre frequency and cell size. 5 GHz (centre 5.5 GHz, wavelength 5.45 cm) needs cells of
+ * 0.454 cm or less for 12 cells per wavelength, so it uses 0.45 cm (12.1 cells). The grid stays the same size,
+ * so a map costs the same as at 2.4 GHz and the room is 0.45 times as wide. shortcut: a smaller room at 5 GHz
+ * instead of a bigger grid (8x the work); upgrade when a 1536-cell grid is fast enough.
+ */
+export const BANDS: Record<Band, { freqHz: number; cellM: number }> = {
+  "2.4": { freqHz: FREQ_HZ, cellM: CELL_M },
+  "5": { freqHz: FREQ_5_HZ, cellM: 0.0045 },
+};
+export function cellsPerWavelength(band: Band): number {
+  return C0 / BANDS[band].freqHz / BANDS[band].cellM;
+}
 /** Grid side in cells. The CPU fallback is half of that, so its room is 3.84 m instead of 7.68 m. */
 export const GPU_GRID = 768;
 export const CPU_GRID = 384;
@@ -86,11 +101,13 @@ export interface BuildOptions {
   /** Settle steps; default lets a wave cross the room about twice. */
   settleSteps?: number;
   averagePeriods?: number;
+  /** Wi-Fi band; default 2.4 GHz. */
+  band?: Band;
 }
 
-/** Turn a floor plan into a solver job on an n x n grid of CELL_M cells (room side n * CELL_M). */
+/** Turn a floor plan into a solver job on an n x n grid of cells of the band (room side n * cell). */
 export function buildJob(scene: Scene, n: number, opts: BuildOptions = {}): BuiltJob {
-  const dx = CELL_M;
+  const { freqHz, cellM: dx } = BANDS[opts.band ?? "2.4"];
   const matIdx = rasterizeWalls(scene.walls, n, dx);
   // Imported plan walls count as brick. Cells outside the grid are dropped.
   if (scene.imported) {
@@ -98,20 +115,20 @@ export function buildJob(scene: Scene, n: number, opts: BuildOptions = {}): Buil
     const brick = WALL_ORDER.indexOf("brick") + 1;
     for (let j = 0; j < Math.min(rows, n); j++) for (let i = 0; i < Math.min(cols, n); i++) if (mask[j * cols + i]) matIdx[j * n + i] = brick;
   }
-  const table: Material[] = [AIR, ...WALL_ORDER.map((id) => (opts.materialOf ? opts.materialOf(id) : materialFor(id)))];
+  const table: Material[] = [AIR, ...WALL_ORDER.map((id) => (opts.materialOf ? opts.materialOf(id) : materialFor(id, freqHz)))];
   // Fastest speed: free air (every material has C >= eps0 and L = mu0).
   const dt = (DEFAULT_COURANT * dx) / C0;
   const cs = buildCoefficients(n, n, dx, dt, (ix, iy) => table[matIdx[iy * n + ix]!]!);
   // sample at least 6 times per period, so the mean of u^2 is exact for a sine
-  const spp = 1 / (FREQ_HZ * dt);
+  const spp = 1 / (freqHz * dt);
   const sampleEvery = Math.max(1, Math.floor(spp / 6));
-  const plan = makePlan(FREQ_HZ, dt, opts.settleSteps ?? Math.round((2 * n) / DEFAULT_COURANT), opts.averagePeriods ?? 2, sampleEvery);
+  const plan = makePlan(freqHz, dt, opts.settleSteps ?? Math.round((2 * n) / DEFAULT_COURANT), opts.averagePeriods ?? 2, sampleEvery);
   const ix = Math.min(n - 1, Math.max(0, Math.floor(scene.router.x / dx)));
   const iy = Math.min(n - 1, Math.max(0, Math.floor(scene.router.y / dx)));
   const job: FieldJob = {
     cs,
     cpmlThickness: CPML_CELLS,
-    sources: [{ ix, iy, freq: FREQ_HZ, amplitude: 1, rampPeriods: 6 }],
+    sources: [{ ix, iy, freq: freqHz, amplitude: 1, rampPeriods: 6 }],
     plan,
   };
   return { job, n, dx, matIdx };

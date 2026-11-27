@@ -4,9 +4,9 @@ import { drawUnderlay } from "@ui/index";
 import { Coach, Ring, WIFI_END, WIFI_STEPS, useWaited } from "./coach";
 import { drawDevice, drawNoSignal, drawOuterWall, drawRoomLabel, drawRouter, drawWallLine } from "./draw";
 import { findDeadZones, levelOf, levelWord, paintGuess, paintHeatmap, smoothPower, type DeadZones } from "./heatmap";
-import { FREQ_HZ, WALL_MATERIALS, wallMaterial, type WallMaterialId } from "./materials";
+import { WALL_MATERIALS, wallMaterial, type WallMaterialId } from "./materials";
 import { HelpPanel, Pinger, SketchDialog, WipeBar, thump, useReducedMotion, type SketchApplied } from "./radar";
-import { CELL_M, CPML_CELLS, EXAMPLE_LABELS, buildJob, defaultDevices, defaultScene, referencePower, toDb, type Device, type Scene, type Wall } from "./scene";
+import { BANDS, CELL_M, CPML_CELLS, type Band, EXAMPLE_LABELS, buildJob, defaultDevices, defaultScene, referencePower, toDb, type Device, type Scene, type Wall } from "./scene";
 import { pickBackend, startSim, type Backend, type SimHandle } from "./sim";
 
 const CANVAS_PX = 768;
@@ -60,6 +60,7 @@ export default function App() {
   const [material, setMaterial] = useState<WallMaterialId>("brick");
   const [draft, setDraft] = useState<Wall | null>(null);
   const [status, setStatus] = useState<Status>({ text: "Starting up…", fraction: null });
+  const [band, setBand] = useState<Band>("2.4");
   const [stale, setStale] = useState(false);
   const [hasMap, setHasMap] = useState(false);
   const [mapVersion, setMapVersion] = useState(0);
@@ -84,6 +85,7 @@ export default function App() {
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<Scene | null>(null);
   const backendRef = useRef<Backend | null>(null);
+  const bandRef = useRef<Band>("2.4");
   const simRef = useRef<SimHandle | null>(null);
   const timerRef = useRef<number | undefined>(undefined);
   const toastTimer = useRef<number | undefined>(undefined);
@@ -98,7 +100,9 @@ export default function App() {
   const pingerRef = useRef<Pinger | null>(null);
   const photoRef = useRef<{ photo: HTMLCanvasElement; wM: number; hM: number } | null>(null);
 
-  const roomM = backend ? backend.n * CELL_M : PROVISIONAL_M;
+  /** Cell size of the chosen band, in metres. */
+  const cell = BANDS[band].cellM;
+  const roomM = backend ? backend.n * cell : PROVISIONAL_M;
   /** Icon and text scale: 1 on a big screen, about 2 on a phone, so the pictures stay readable. */
   const u = Math.max(1, CANVAS_PX / cssW);
 
@@ -115,7 +119,7 @@ export default function App() {
     simRef.current?.cancel();
     const t0 = performance.now();
     try {
-      const built = buildJob(s, b.n);
+      const built = buildJob(s, b.n, { band: bandRef.current });
       setStatus({ text: "Starting…", fraction: 0 });
       const sim = startSim(b, built.job, (fraction, phase) =>
         setStatus({ text: phase === "settle" ? "Letting the waves spread…" : "Averaging the signal…", fraction }),
@@ -238,11 +242,11 @@ export default function App() {
     (x: number, y: number): 0 | 1 | 2 | 3 | null => {
       const n = backend?.n;
       if (!n || !dbRef.current || !hasMap || stale) return null;
-      const i = Math.min(n - 1, Math.max(0, Math.floor(x / CELL_M)));
-      const j = Math.min(n - 1, Math.max(0, Math.floor(y / CELL_M)));
+      const i = Math.min(n - 1, Math.max(0, Math.floor(x / cell)));
+      const j = Math.min(n - 1, Math.max(0, Math.floor(y / cell)));
       return levelOf(dbRef.current[j * n + i]!);
     },
-    [backend, hasMap, stale],
+    [backend, hasMap, stale, cell],
   );
 
   // Floor plan overlay: outer wall, imported walls, walls, room names, no-signal tags, router, devices. Drawn from the first frame.
@@ -254,10 +258,10 @@ export default function App() {
     const g = c.getContext("2d")!;
     const k = CANVAS_PX / roomM;
     g.clearRect(0, 0, CANVAS_PX, CANVAS_PX);
-    drawOuterWall(g, CANVAS_PX, CPML_CELLS * CELL_M * k, u);
+    drawOuterWall(g, CANVAS_PX, CPML_CELLS * cell * k, u);
     if (importedCanvas && scene.imported) {
       g.imageSmoothingEnabled = false;
-      g.drawImage(importedCanvas, 0, 0, scene.imported.cols * CELL_M * k, scene.imported.rows * CELL_M * k);
+      g.drawImage(importedCanvas, 0, 0, scene.imported.cols * cell * k, scene.imported.rows * cell * k);
     }
     const line = (w: Wall, alpha = 1) => {
       const info = wallMaterial(w.material);
@@ -267,11 +271,11 @@ export default function App() {
     if (draft) line(draft, 0.6);
     if (isExample) for (const l of EXAMPLE_LABELS) drawRoomLabel(g, l.text, l.fx * CANVAS_PX, l.fy * CANVAS_PX, u);
     if (hasMap && !stale && backend && deadRef.current) {
-      for (const b of deadRef.current.blobs.slice(0, 3)) drawNoSignal(g, b.cx * CELL_M * k, b.cy * CELL_M * k - 30 * u, u);
+      for (const b of deadRef.current.blobs.slice(0, 3)) drawNoSignal(g, b.cx * cell * k, b.cy * cell * k - 30 * u, u);
     }
     drawRouter(g, scene.router.x * k, scene.router.y * k, u, step === 1);
     for (const d of devices) drawDevice(g, d.kind, d.x * k, d.y * k, levelAt(d.x, d.y), u);
-  }, [scene, draft, roomM, importedCanvas, devices, mapVersion, hasMap, stale, backend, isExample, u, step, levelAt]);
+  }, [scene, draft, roomM, cell, importedCanvas, devices, mapVersion, hasMap, stale, backend, isExample, u, step, levelAt]);
 
   // Faint photo of the paper plan, 15%, under the walls.
   useEffect(() => {
@@ -291,13 +295,13 @@ export default function App() {
   };
   const snap = (v: number) => Math.min(roomM, Math.max(0, Math.round(v / SNAP_M) * SNAP_M));
   /** At least 26 screen pixels, so a finger can grab an icon. */
-  const grabM = Math.max(GRAB_M, (26 / cssW) * roomM);
+  const grabM = Math.max(Math.min(GRAB_M, roomM * 0.05), (26 / cssW) * roomM);
 
   const cellAt = (p: { x: number; y: number }): number => {
     const n = backend?.n;
     if (!n) return -1;
-    const i = Math.floor(p.x / CELL_M);
-    const j = Math.floor(p.y / CELL_M);
+    const i = Math.floor(p.x / cell);
+    const j = Math.floor(p.y / cell);
     return i >= 0 && j >= 0 && i < n && j < n ? j * n + i : -1;
   };
   const wordAt = (p: { x: number; y: number }): string => {
@@ -322,13 +326,13 @@ export default function App() {
     }
     try {
       if (!liveRef.current) {
-        const built = buildJob(sceneRef.current, b.n);
-        const sim = createLiveSim({ cs: built.job.cs, backend: b.kind === "webgpu" ? "gpu" : "cpu", device: b.kind === "webgpu" ? b.device : undefined, pulseHz: FREQ_HZ });
+        const built = buildJob(sceneRef.current, b.n, { band: bandRef.current });
+        const sim = createLiveSim({ cs: built.job.cs, backend: b.kind === "webgpu" ? "gpu" : "cpu", device: b.kind === "webgpu" ? b.device : undefined, pulseHz: BANDS[bandRef.current].freqHz });
         liveRef.current = sim;
         pg.attach(sim);
       }
       const sim = liveRef.current;
-      pg.ping(Math.min(sim.nx - 1, Math.max(0, Math.floor(p.x / CELL_M))), Math.min(sim.ny - 1, Math.max(0, Math.floor(p.y / CELL_M))));
+      pg.ping(Math.min(sim.nx - 1, Math.max(0, Math.floor(p.x / cell))), Math.min(sim.ny - 1, Math.max(0, Math.floor(p.y / cell))));
       const ratio = 1 / 60 / ((b.kind === "webgpu" ? SPF_GPU : SPF_CPU) * sim.dt);
       say(`Slowed down about ${Math.round(ratio / 1e6)} million times so you can watch it. Real Wi-Fi crosses a room in about 25 billionths of a second. The thump is just for feel.`, 9000);
     } catch (e) {
@@ -422,6 +426,31 @@ export default function App() {
       sendWave(clickRef.current);
       clickRef.current = null;
     }
+  };
+
+  /** Switch Wi-Fi band. The room shrinks at 5 GHz (finer cells, same grid), so everything is rescaled to keep its place. */
+  const changeBand = (next: Band) => {
+    if (!backend || next === band) return;
+    const newRoom = backend.n * BANDS[next].cellM;
+    const ratio = newRoom / roomM;
+    const sc = (v: number) => Math.round(v * ratio * 1000) / 1000;
+    pingerRef.current?.cancel();
+    liveRef.current?.destroy();
+    liveRef.current = null;
+    bandRef.current = next;
+    setBand(next);
+    setDevices((ds) => ds.map((d) => ({ ...d, x: d.x * ratio, y: d.y * ratio })));
+    if (photoRef.current) photoRef.current = { photo: photoRef.current.photo, wM: photoRef.current.wM * ratio, hM: photoRef.current.hM * ratio };
+    setPhotoVersion((v) => v + 1);
+    if (scene) {
+      const s: Scene = isExample
+        ? defaultScene(newRoom)
+        : { ...scene, router: { x: sc(scene.router.x), y: sc(scene.router.y) }, walls: scene.walls.map((w) => ({ ...w, x1: sc(w.x1), y1: sc(w.y1), x2: sc(w.x2), y2: sc(w.y2) })) };
+      sceneRef.current = s;
+      setScene(s);
+    }
+    setDraft(null);
+    scheduleRun();
   };
 
   const clearWalls = () => {
@@ -558,6 +587,15 @@ export default function App() {
               </span>
             ))}
           </div>
+          <div className="band" role="group" aria-label="Wi-Fi band">
+            <button className={band === "2.4" ? "on" : ""} aria-pressed={band === "2.4"} onClick={() => changeBand("2.4")}>
+              2.4 GHz (reaches far)
+            </button>
+            <button className={band === "5" ? "on" : ""} aria-pressed={band === "5"} onClick={() => changeBand("5")}>
+              5 GHz (faster, shorter reach)
+            </button>
+          </div>
+          {band === "5" && <div className="bandnote">5 GHz shows a smaller room ({roomM.toFixed(1)} m wide) so the map still comes quickly.</div>}
           <div className="key">
             <span>Brighter teal means stronger Wi-Fi.</span>
             {cursorWord && <span>Here: {cursorWord}</span>}
@@ -591,7 +629,7 @@ export default function App() {
         </div>
       </div>
       {sketchOpen && backend && (
-        <SketchDialog cellMetres={CELL_M} maxCols={backend.n} maxRows={backend.n} onApply={applySketch} onClose={() => setSketchOpen(false)} />
+        <SketchDialog cellMetres={cell} maxCols={backend.n} maxRows={backend.n} onApply={applySketch} onClose={() => setSketchOpen(false)} />
       )}
     </>
   );

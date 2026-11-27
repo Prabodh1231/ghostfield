@@ -7,6 +7,11 @@ export const C0 = 1 / Math.sqrt(EPS0 * MU0);
 
 /** Wi-Fi channel centre used by the app, 2.4 GHz. */
 export const FREQ_HZ = 2.4e9;
+/**
+ * Wi-Fi centre used for 5 GHz. The 5 GHz band spans 5.15 to 5.85 GHz; 5.5 GHz is near the middle.
+ * Every ITU row below is valid at 5.5 GHz (the narrowest range is brick, 1 to 10 GHz).
+ */
+export const FREQ_5_HZ = 5.5e9;
 
 /**
  * Wall materials from Recommendation ITU-R P.2040-3 (08/2023), "Effects of building materials and
@@ -29,6 +34,8 @@ export const FREQ_HZ = 2.4e9;
  * The wall THICKNESSES below are NOT from ITU; they are typical values chosen for this app.
  */
 export interface ItuRow {
+  /** Valid frequency range in GHz (ITU-R P.2040-3 Table 3). */
+  range: readonly [number, number];
   a: number;
   b: number;
   c: number;
@@ -48,12 +55,12 @@ export interface WallMaterialInfo {
 }
 
 export const WALL_MATERIALS: readonly WallMaterialInfo[] = [
-  { id: "drywall", label: "Drywall (plasterboard)", itu: { a: 2.73, b: 0, c: 0.0085, d: 0.9395 }, thickness: 0.015, color: "#c9b99a" },
-  { id: "glass", label: "Glass", itu: { a: 6.31, b: 0, c: 0.0036, d: 1.3394 }, thickness: 0.01, color: "#5ec8e5" },
-  { id: "wood", label: "Wood", itu: { a: 1.99, b: 0, c: 0.0047, d: 1.0718 }, thickness: 0.04, color: "#a0693a" },
-  { id: "brick", label: "Brick", itu: { a: 3.91, b: 0, c: 0.0238, d: 0.16 }, thickness: 0.1, color: "#b5483a" },
-  { id: "concrete", label: "Concrete", itu: { a: 5.24, b: 0, c: 0.0462, d: 0.7822 }, thickness: 0.2, color: "#8a8a8a" },
-  { id: "metal", label: "Metal", itu: { a: 1, b: 0, c: 1e7, d: 0 }, thickness: 0.01, color: "#2b2f6b" },
+  { id: "drywall", label: "Drywall (plasterboard)", itu: { range: [1, 100], a: 2.73, b: 0, c: 0.0085, d: 0.9395 }, thickness: 0.015, color: "#c9b99a" },
+  { id: "glass", label: "Glass", itu: { range: [0.1, 100], a: 6.31, b: 0, c: 0.0036, d: 1.3394 }, thickness: 0.01, color: "#5ec8e5" },
+  { id: "wood", label: "Wood", itu: { range: [0.001, 100], a: 1.99, b: 0, c: 0.0047, d: 1.0718 }, thickness: 0.04, color: "#a0693a" },
+  { id: "brick", label: "Brick", itu: { range: [1, 10], a: 3.91, b: 0, c: 0.0238, d: 0.16 }, thickness: 0.1, color: "#b5483a" },
+  { id: "concrete", label: "Concrete", itu: { range: [1, 100], a: 5.24, b: 0, c: 0.0462, d: 0.7822 }, thickness: 0.2, color: "#8a8a8a" },
+  { id: "metal", label: "Metal", itu: { range: [1, 100], a: 1, b: 0, c: 1e7, d: 0 }, thickness: 0.01, color: "#2b2f6b" },
 ];
 
 export function wallMaterial(id: WallMaterialId): WallMaterialInfo {
