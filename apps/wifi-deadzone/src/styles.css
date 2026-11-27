@@ -124,3 +124,8 @@ body[data-wait="1"][data-coach="2"] .wipebar, body[data-wait="1"][data-coach="4"
   .toast { top: auto; bottom: 150px; }
   .legend { min-width: 0; font-size: 12px; }
 }
+
+/* round 12: band switch */
+.legend .band { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.legend .band button { font-size: 12px; padding: 4px 10px; }
+.legend .bandnote { color: #ffd37a; margin-bottom: 4px; }
