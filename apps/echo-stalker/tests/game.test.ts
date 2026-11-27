@@ -105,3 +105,23 @@ describe("headless game (CPU profile, level 1)", () => {
     expect(far).toBeGreaterThan(1);
   }, 60000);
 });
+
+describe("sketch to level", () => {
+  it("ignores a margin outside the drawn walls and puts start, monster and exit on open floor", async () => {
+    const { sketchToLevel } = await import("../src/sketchLevel");
+    const cols = 120;
+    const rows = 80;
+    const m = new Uint8Array(cols * rows);
+    const wall = (x: number, y: number) => (m[y * cols + x] = 1);
+    for (let x = 8; x < 112; x++) { wall(x, 8); wall(x, 71); wall(x, 72); }
+    for (let y = 8; y < 72; y++) { wall(8, y); wall(111, y); wall(60, y < 36 || y > 44 ? y : 0); }
+    const lvl = sketchToLevel(m, cols, rows, CPU_PROFILE);
+    const cell = (p: [number, number]) => Math.floor(p[1] / CPU_PROFILE.dx) * CPU_PROFILE.nx + Math.floor(p[0] / CPU_PROFILE.dx);
+    for (const p of [lvl.start, lvl.exit, [lvl.monsters[0]!.x, lvl.monsters[0]!.y] as [number, number]]) {
+      expect(lvl.solid[cell(p)]).toBe(0);
+      expect(p[0]).toBeGreaterThan(0.9); // inside the walls, not in the margin
+      expect(p[1]).toBeGreaterThan(0.9);
+    }
+    expect(Math.hypot(lvl.exit[0] - lvl.start[0], lvl.exit[1] - lvl.start[1])).toBeGreaterThan(4);
+  });
+});

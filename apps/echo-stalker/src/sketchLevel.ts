@@ -37,18 +37,28 @@ export function sketchToLevel(solidIn: Uint8Array, cols: number, rows: number, p
   for (let i = 0; i < nx * ny; i++) if (solid[i]) walls.push(i);
   const clear = bfs(nx, ny, walls, () => true);
   const roomy = (i: number) => !solid[i] && clear[i]! >= need;
-  // start: the roomy cell closest to the top-left corner
+  // start: in the biggest open area (so a margin round the drawing is ignored), nearest its top-left corner
+  const comp = new Int32Array(nx * ny).fill(-1);
+  const sizes: number[] = [];
+  for (let i = 0; i < nx * ny; i++) {
+    if (!roomy(i) || comp[i]! >= 0) continue;
+    const dd = bfs(nx, ny, [i], roomy);
+    let n = 0;
+    for (let j = 0; j < dd.length; j++) if (dd[j]! >= 0) { comp[j] = sizes.length; n++; }
+    sizes.push(n);
+  }
+  if (sizes.length === 0) throw new SketchError("No open floor found. Draw wider rooms and corridors, at least 0.6 m across.");
+  const big = sizes.indexOf(Math.max(...sizes));
   let start = -1;
   let best = Infinity;
   for (let i = 0; i < nx * ny; i++) {
-    if (!roomy(i)) continue;
+    if (comp[i] !== big) continue;
     const s = (i % nx) + ((i / nx) | 0);
     if (s < best) {
       best = s;
       start = i;
     }
   }
-  if (start < 0) throw new SketchError("No open floor found. Draw wider rooms and corridors, at least 0.6 m across.");
   const d = bfs(nx, ny, [start], roomy);
   let far = start;
   for (let i = 0; i < nx * ny; i++) if (d[i]! > d[far]!) far = i;
