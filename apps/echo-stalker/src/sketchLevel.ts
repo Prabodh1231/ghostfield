@@ -77,7 +77,7 @@ export function sketchToLevel(solidIn: Uint8Array, cols: number, rows: number, p
   const at = (i: number): [number, number] => [((i % nx) + 0.5) * p.dx, (((i / nx) | 0) + 0.5) * p.dx];
   return {
     name: "Your sketch",
-    hint: "This is the floor plan you drew. Find the faint pulsing exit.",
+    hint: "This is the floor plan you drew. Find the door (a faint teal glow at its foot).",
     nx,
     ny,
     solid,

@@ -58,7 +58,7 @@ const m = (t: number) => (t + 0.5) * TILE_M;
 export const LEVELS: TileLevel[] = [
   {
     name: "1. First steps",
-    hint: "Walk to the faint pulsing exit on the right. Hide in the grey dotted zones to stay quiet.",
+    hint: "Find the door on the right. Look for a faint teal glow at its foot. Hide in the grey dotted zones to stay quiet.",
     tiles: board([
       W(8, 1, 8, 9), W(8, 14, 8, 22), // wall with a door
       W(32, 1, 32, 15), W(32, 20, 32, 22), // wall with a door to the exit room
@@ -71,7 +71,7 @@ export const LEVELS: TileLevel[] = [
   },
   {
     name: "2. The snake",
-    hint: "One long winding path. The monster is faster here.",
+    hint: "One long winding path to the door. The monster is faster here.",
     tiles: board([
       W(6, 1, 6, 17), W(12, 6, 12, 22), W(18, 1, 18, 17), W(24, 6, 24, 22), W(30, 1, 30, 17),
       Z(8, 3, 10, 5), Z(14, 19, 16, 21), Z(20, 3, 22, 5), Z(26, 19, 28, 21), Z(2, 14, 4, 16),
@@ -82,7 +82,7 @@ export const LEVELS: TileLevel[] = [
   },
   {
     name: "3. Two hunters",
-    hint: "Two monsters. Throw a pebble (click) to pull them away.",
+    hint: "Two monsters. Throw a pebble (click) to pull them away, then reach the door.",
     tiles: board([
       W(4, 8, 14, 8), W(10, 15, 24, 15), W(26, 3, 26, 12), W(28, 18, 36, 18),
       W(16, 4, 17, 5), W(20, 19, 21, 20), W(32, 9, 33, 11), W(20, 9, 22, 11),
