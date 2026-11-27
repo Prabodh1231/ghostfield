@@ -16,8 +16,8 @@ a { color: var(--teal); }
 .chip { background: var(--chip); border: 1px solid var(--edge); border-radius: 12px; backdrop-filter: blur(6px); }
 
 /* full-bleed picture */
-.stage { position: fixed; inset: 0; display: flex; align-items: flex-start; justify-content: center; background: var(--bg); touch-action: none; }
-.map { position: relative; }
+.stage { position: fixed; inset: 0; padding-top: 76px; box-sizing: border-box; display: flex; align-items: flex-start; justify-content: center; background: var(--bg); touch-action: none; }
+.map { position: relative; width: min(100vw, calc((100vh - 206px) * var(--r, 1))); }
 .map canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .map canvas.heat, .map canvas.before { image-rendering: pixelated; transition: opacity 0.2s; }
 .map canvas.overlay { cursor: crosshair; }
@@ -26,7 +26,7 @@ a { color: var(--teal); }
 .map .glow { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; opacity: 0; transition: opacity 0.25s; }
 .map.pinging .glow { opacity: 1; }
 .map.pinging canvas.heat { opacity: 0.3; }
-.wait { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 16px; background: rgba(5, 7, 11, 0.8); color: #fff; font-size: 17px; pointer-events: none; }
+.wait { position: fixed; left: 10px; top: 70px; z-index: 5; display: flex; flex-direction: column; gap: 6px; padding: 6px 12px; max-width: calc(100vw - 20px); box-sizing: border-box; color: #fff; font-size: 13px; pointer-events: none; }
 progress { width: min(60vw, 320px); height: 8px; accent-color: var(--teal); }
 
 /* floating bits */
@@ -44,7 +44,7 @@ progress { width: min(60vw, 320px); height: 8px; accent-color: var(--teal); }
 .topright .qbtn { width: 34px; height: 34px; border-radius: 50%; padding: 0; font-weight: 700; }
 .hint { position: fixed; left: 0; right: 0; margin: 0 auto; width: fit-content; top: 40%; z-index: 4; font-size: 22px; padding: 12px 22px; pointer-events: none; transition: opacity 0.6s; text-align: center; }
 .hint.gone { opacity: 0; }
-.toast { position: fixed; left: 0; right: 0; margin: 0 auto; width: fit-content; top: 56px; z-index: 5; padding: 6px 14px; font-size: 13px; max-width: 92vw; text-align: center; }
+.toast { position: fixed; left: 0; right: 0; margin: 0 auto; width: fit-content; top: 140px; z-index: 5; padding: 6px 14px; font-size: 13px; max-width: 92vw; text-align: center; }
 .wipebar { position: fixed; left: 0; right: 0; margin: 0 auto; width: fit-content; bottom: 138px; z-index: 5; display: flex; gap: 8px; align-items: center; padding: 6px 12px; background: var(--chip); border: 1px solid var(--edge); border-radius: 12px; font-size: 13px; }
 .wipebar input { width: min(40vw, 280px); accent-color: var(--teal); }
 
@@ -80,7 +80,7 @@ progress { width: min(60vw, 320px); height: 8px; accent-color: var(--teal); }
   .missions { top: 56px; }
   .missions li { font-size: 12px; }
   .hint { font-size: 18px; }
-  .toast { top: 56px; }
+  .toast { top: auto; bottom: 200px; }
   .wipebar { bottom: 190px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -89,3 +89,37 @@ progress { width: min(60vw, 320px); height: 8px; accent-color: var(--teal); }
 .map.stale canvas.plan { opacity: 0.5; }
 .map.pinging canvas.plan { opacity: 0.35; }
 .map canvas.plan { transition: opacity 0.2s; }
+
+/* coach banner: one step at a time */
+.coach { position: fixed; top: 10px; left: 0; right: 0; margin: 0 auto; width: min(520px, 46vw); z-index: 5; padding: 8px 14px; box-sizing: border-box; }
+.coachtop { display: flex; justify-content: space-between; align-items: center; }
+.coachtext { font-size: 16px; font-weight: 600; margin-top: 2px; }
+button.link { background: none; border: none; color: var(--teal); text-decoration: underline; padding: 2px 4px; }
+.ring { outline: 3px solid #fff; outline-offset: 2px; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { outline-color: var(--teal); outline-offset: 5px; } }
+@media (prefers-reduced-motion: reduce) { .ring { outline-width: 4px; } }
+.playbtn { font-weight: 700; }
+.tools.more { flex-basis: 100%; }
+.map canvas.plan { touch-action: none; }
+
+@media (max-width: 900px) {
+  .coach { width: min(520px, 92vw); top: 66px; }
+  .wait { top: 140px; }
+  .stage { padding-top: 140px; }
+  .map { width: min(100vw, calc((100vh - 270px) * var(--r, 1))); }
+}
+/* phone: title row, room map, coach banner under it, controls at the bottom */
+@media (max-width: 640px) {
+  .stage { inset: 52px 0 0 0; padding-top: 0; justify-content: flex-start; flex-direction: column; align-items: center; overflow-y: auto; touch-action: pan-y; padding-bottom: 190px; }
+  .map { width: min(100vw, calc(58vh * var(--r, 1))); flex: none; }
+  .coach { position: static; width: calc(100vw - 20px); margin: 8px 10px 0; flex: none; }
+  .wait { top: auto; bottom: 150px; }
+  .title h1 { font-size: 13px; }
+  .topright .status { display: none; }
+  .legend { min-width: 0; }
+  .legend .key, .legend .ticks { display: none; }
+  .legend strong { font-size: 11px; font-weight: 500; }
+  .dock { padding: 6px 8px; gap: 6px; }
+  .tools button { padding: 7px 10px; }
+  .help, .panel { top: 52px; }
+}
