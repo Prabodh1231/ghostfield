@@ -52,7 +52,8 @@ ghostfield-crew/               # separate public repo: Kiro Crew app (1 agent, 1
 Note: numbers in earlier research docs are NOT verified. Only quote numbers our own tests produce.
 
 ## Cut (do not build)
-Rust/WASM SIMD, Crank-Nicolson, RLC tuned trap, 2.5D ceiling overlay, ConvolverNode reverb, image floor-plan tracing, 5 GHz.
+Rust/WASM SIMD, Crank-Nicolson, RLC tuned trap, 2.5D ceiling overlay, ConvolverNode reverb, 5 GHz.
+(Round 7 change: "image floor-plan tracing" was removed from this list. See "Round 7" at the end.)
 
 ## Plan
 | Days | Goal |
@@ -78,3 +79,15 @@ Fallback: if WebGPU is not working by Day 5, ship CPU-only.
 
 ## First task
 Scaffold `ghostfield/` (pnpm workspace, TypeScript, Vitest, fast-check, MIT LICENSE, `.kiro/steering/{product,tech,structure}.md`). Then build the pure-TS solver in `packages/ghostfield-core/src/cpu/` and make tests 6 and 7 pass first.
+
+## Round 7 (2026-11-27): the owner's new request overrides the old brief
+
+The first brief said "do not build image floor-plan tracing". The owner has now asked for it, so **that rule no longer applies**. The sketch importer is built (`importSketch` in `packages/ghostfield-ui`) and used in three places: the Wi-Fi app, the bass app (PR #12, merged) and the Echo Stalker game ("Play Your Sketch", merged).
+
+Also new in round 7:
+- A live wave mode in the engine (`createLiveSim`), so a click can send a ping and the wave can be watched.
+- The radar look (palette, afterglow, thump, bottom bar, Before/After slider, mission pills) in the Wi-Fi and bass apps (PR #12, merged).
+- A third product, `apps/echo-stalker`, an echolocation stealth game at `/echo/` (merged as dff356c). It is now part of the plan: three things on one engine.
+- A shared package `packages/ghostfield-ui` for the look and the sketch importer.
+
+Still true: the models are 2D, Wi-Fi is relative signal not dBm, live pings run in slow motion, and only numbers our own tests print may be quoted. Facts and gaps: `docs/echo-stalker.md`, `docs/radar-and-sketch.md`, README "Honest limits".

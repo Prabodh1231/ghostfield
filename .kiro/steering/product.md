@@ -19,3 +19,10 @@ Each app only supplies its own materials, sources, probes and UI.
 ## Cut (do not build)
 
 Rust/WASM SIMD, Crank-Nicolson, RLC tuned trap, 2.5D ceiling overlay, ConvolverNode reverb, image floor-plan tracing, 5 GHz.
+
+## Round 7 update (2026-11-27)
+
+- "Image floor-plan tracing" is no longer cut. The owner asked for it (see BRIEF.md, "Round 7"). It is `importSketch` in `packages/ghostfield-ui`.
+- A third product exists: `apps/echo-stalker`, a pitch-black echolocation stealth game at `/echo/`, built on the live sim.
+- The Wi-Fi and bass apps get a radar look (PR #12, merged). Red alerts always come with a shape.
+- Live pings and the game run in slow motion. Say so. Keep the honest 2D note on every start screen.
